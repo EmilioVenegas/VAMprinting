@@ -1,0 +1,5 @@
+{
+  "name": "VAM Web Controller",
+  "description": "A web-based controller for a volumetric 3D printer that handles slicing 3D models, projecting images, and controlling hardware via Web Bluetooth.",
+  "requestFramePermissions": []
+}
