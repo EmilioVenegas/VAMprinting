@@ -9,16 +9,21 @@ import STLViewer from './components/STLViewer';
 import SlicePreview from './components/SlicePreview';
 import { io, Socket } from 'socket.io-client';
 
-// --- ICONS (No changes) ---
+// --- ICONS (Added PlayIcon) ---
 const UploadIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
     </svg>
 );
+
 const PrintIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v2a2 2 0 01-2 2H7a2 2 0 01-2-2V4zm11.707 6.293a1 1 0 01-1.414 0L14 8.414V14a2 2 0 01-2 2H8a2 2 0 01-2-2V8.414l-1.293 1.293a1 1 0 01-1.414-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 010 1.414z" />
-    </svg>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+    <path 
+      fillRule="evenodd" 
+      d="M5 4a2 2 0 012-2h6a2 2 0 012 2v1H5V4zM5 8h10a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2zm2 5a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" 
+      clipRule="evenodd" 
+    />
+  </svg>
 );
 const StopIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -26,8 +31,15 @@ const StopIcon = () => (
     </svg>
 );
 
+// --- NEW ---
+const PlayIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clipRule="evenodd" />
+    </svg>
+);
 
-// --- SlicingTab COMPONENT ---
+
+// --- SlicingTab COMPONENT (No changes) ---
 const SlicingTab: React.FC<{
     slicingParams: SlicingParams;
     setSlicingParams: React.Dispatch<React.SetStateAction<SlicingParams>>;
@@ -35,7 +47,7 @@ const SlicingTab: React.FC<{
     slicingStatus: SlicingStatus;
     slicingProgress: number;
     slicingStats: SlicingStats;
-    slicingStatusMessage: string; // <-- NEW PROP
+    slicingStatusMessage: string;
     fileName: string | null;
     setFileName: (name: string | null) => void;
     setStlFile: (file: File | null) => void;
@@ -64,8 +76,8 @@ const SlicingTab: React.FC<{
             <p className="text-sm text-neutral-500 h-5">{fileName || "No File Selected"}</p>
             
             <div className="w-full max-w-sm space-y-4">
-                <SliderInput label="Voxel Size" min={0.1} max={5} step={0.1} value={slicingParams.voxelSize} onChange={val => setSlicingParams(p => ({ ...p, voxelSize: val }))} />
-                <SliderInput label="Number of Projections" min={90} max={720} step={90} value={slicingParams.numProjections} onChange={val => setSlicingParams(p => ({ ...p, numProjections: val }))} />
+                <SliderInput label="Voxel Size" min={0.05} max={2.0} step={0.1} value={slicingParams.voxelSize} onChange={val => setSlicingParams(p => ({ ...p, voxelSize: val }))} />
+                <SliderInput label="Number of Projections" min={30} max={360} step={30} value={slicingParams.numProjections} onChange={val => setSlicingParams(p => ({ ...p, numProjections: val }))} />
                 <div>
                     <label className="block text-sm font-medium text-neutral-300 mb-2">Initial Rotation</label>
                     <div className="grid grid-cols-3 gap-2">
@@ -90,7 +102,6 @@ const SlicingTab: React.FC<{
                         <div className="w-full bg-neutral-700 rounded-full h-2.5">
                             <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${slicingProgress}%`, transition: 'width 0.2s ease-in-out' }}></div>
                         </div>
-                        {/* --- MODIFIED to show specific feedback --- */}
                         <p className="text-center text-sm text-neutral-400 mt-1 truncate" title={slicingStatusMessage}>
                             {Math.round(slicingProgress)}% - {slicingStatusMessage}
                         </p>
@@ -113,8 +124,7 @@ const SlicingTab: React.FC<{
     );
 };
 
-// --- ProjectingTab and AdvancedTab (No changes) ---
-
+// --- ProjectingTab COMPONENT (MODIFIED) ---
 const ProjectingTab: React.FC<{
     projectionParams: ProjectionParams;
     setProjectionParams: React.Dispatch<React.SetStateAction<ProjectionParams>>;
@@ -133,16 +143,35 @@ const ProjectingTab: React.FC<{
     setHopsPerTrigger: (h: number) => void;
     hopDelay: number;
     setHopDelay: (d: number) => void;
-
+    // --- NEW PROPS ---
+    handleTestPrint: () => void;
+    isTestPrinting: boolean;
+    hasSlices: boolean;
+    isProjectionWindowConnected: boolean;
 }> = ({ 
     projectionParams, setProjectionParams, handlePrint, stopPrint, handlePair, isPrinting, isConnected, isAdmin, setIsAdmin,
-    printMode, setPrintMode, timePerFrame, setTimePerFrame, hopsPerTrigger, setHopsPerTrigger, hopDelay, setHopDelay
+    printMode, setPrintMode, timePerFrame, setTimePerFrame, hopsPerTrigger, setHopsPerTrigger, hopDelay, setHopDelay,
+    // --- NEW PROPS ---
+    handleTestPrint, isTestPrinting, hasSlices, isProjectionWindowConnected
 }) => {
     return (
         <div className="space-y-6 flex flex-col items-center p-6">
             <button onClick={handlePair} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition ${isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-neutral-800 hover:bg-neutral-700'}`}>
                 {isConnected ? 'Device Paired' : 'Pair Device'}
             </button>
+
+            {/* --- NEW TEST BUTTON --- */}
+            <button 
+                onClick={handleTestPrint} 
+                disabled={!isProjectionWindowConnected || !hasSlices || isPrinting}
+                className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center 
+                    ${isTestPrinting ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} 
+                    disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
+            >
+                {isTestPrinting ? <StopIcon /> : <PlayIcon />}
+                {isTestPrinting ? 'Stop Test' : 'Test on Second Monitor'}
+            </button>
+
 
             <div className="w-full max-w-sm space-y-4">
                 {/* Print Mode Selector */}
@@ -197,7 +226,7 @@ const ProjectingTab: React.FC<{
                 )}
             </div>
 
-            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={!isConnected} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
+            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={!isConnected || isTestPrinting} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-x-2  ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
                 {isPrinting ? <StopIcon/> : <PrintIcon />}
                 {isPrinting ? 'Stop' : 'Print'}
             </button>
@@ -205,6 +234,7 @@ const ProjectingTab: React.FC<{
     );
 };
 
+// --- AdvancedTab COMPONENT (No changes) ---
 const AdvancedTab: React.FC<{
     alignmentParams: AlignmentParams;
     setAlignmentParams: React.Dispatch<React.SetStateAction<AlignmentParams>>;
@@ -234,7 +264,7 @@ const AdvancedTab: React.FC<{
                 <SliderInput label="Image Scale" min={50} max={200} value={alignmentParams.scale} onChange={val => setAlignmentParams(p => ({ ...p, scale: val }))} unit="%" />
                 <SliderInput label="Translate X" min={-100} max={100} value={alignmentParams.translateX} onChange={val => setAlignmentParams(p => ({ ...p, translateX: val }))} unit="px" />
                 <SliderInput label="Translate Y" min={-100} max={100} value={alignmentParams.translateY} onChange={val => setAlignmentParams(p => ({ ...p, translateY: val }))} unit="px" />
-                <SliderInput label="Contrast" min={50} max={250} value={alignmentParams.contrast} onChange={val => setAlignmentParams(p => ({ ...p, contrast: val }))} unit="%" />
+                <SliderInput label="Contrast" min={10} max={250} value={alignmentParams.contrast} onChange={val => setAlignmentParams(p => ({ ...p, contrast: val }))} unit="%" />
             </div>
         </div>
     );
@@ -292,7 +322,7 @@ const ProjectionView: React.FC = () => {
 };
 
 
-// --- MAIN APP COMPONENT ---
+// --- MAIN APP COMPONENT (MODIFIED) ---
 
 // BLE constants
 const SERVICE_UUID = "1e8d1feb-8ee1-49c7-88f2-d2e8d5fc210d";
@@ -301,12 +331,12 @@ const NOTIFY_CHAR_UUID = "5e4e1b96-5291-419a-af1b-d8034e2e1492";
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Slicing);
-  
+ 
   // State
-  const [slicingParams, setSlicingParams] = useState<SlicingParams>({ voxelSize: 1, numProjections: 360, rotX: 0, rotY: 0, rotZ: 0 });
+  const [slicingParams, setSlicingParams] = useState<SlicingParams>({ voxelSize: 1, numProjections: 120, rotX: 0, rotY: 0, rotZ: 0 });
   const [projectionParams, setProjectionParams] = useState<ProjectionParams>({ totalRotation: 360, rotationSpeed: 30, pauseAfterRotation: 0, verticalSteps: 0, verticalDelay: 1000, verticalDirection: 1 });
   const [alignmentParams, setAlignmentParams] = useState<AlignmentParams>({ scale: 100, translateX: 0, translateY: 0, contrast: 100 });
-  
+ 
   // File state
   const [fileName, setFileName] = useState<string | null>(null);
   const [stlFile, setStlFile] = useState<File | null>(null);
@@ -317,7 +347,7 @@ function App() {
   const [slicingStatus, setSlicingStatus] = useState<SlicingStatus>('idle');
   const [slicingProgress, setSlicingProgress] = useState(0);
   const [slicingStats, setSlicingStats] = useState<SlicingStats>({ time: null, count: null });
-  const [slicingStatusMessage, setSlicingStatusMessage] = useState(''); // <-- NEW
+  const [slicingStatusMessage, setSlicingStatusMessage] = useState('');
   const sliceStartTimeRef = useRef<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -328,6 +358,7 @@ function App() {
   const [timePerFrame, setTimePerFrame] = useState(100); // ms
   const [hopsPerTrigger, setHopsPerTrigger] = useState(10);
   const [hopDelay, setHopDelay] = useState(0.5); // seconds
+  const [isTestPrinting, setIsTestPrinting] = useState(false); // <-- NEW
 
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
@@ -336,14 +367,19 @@ function App() {
   // Window Management State
   const presentationConnectionRef = useRef<PresentationConnection | null>(null);
   const [projectionWindowStatus, setProjectionWindowStatus] = useState('Disconnected');
-  
+ 
   const printProcessRef = useRef<{ currentFrame: number; intervalId: number | null }>({ currentFrame: 0, intervalId: null });
+  const testPrintIntervalRef = useRef<number | null>(null); // <-- NEW
 
   // useEffect for cleaning up EventSource connection
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      // --- NEW: Cleanup test print interval on unmount
+      if (testPrintIntervalRef.current) {
+        clearInterval(testPrintIntervalRef.current);
       }
     };
   }, []);
@@ -355,7 +391,6 @@ function App() {
         return;
     }
     
-    // 1. Reset state for a new slicing job
     setSlicingStatus('slicing');
     setSlicingProgress(0);
     setSlicingStatusMessage('Preparing to slice...');
@@ -363,7 +398,6 @@ function App() {
     setProjectionImages([]);
     sliceStartTimeRef.current = performance.now();
 
-    // Close any existing connection from a previous job
     if (eventSourceRef.current) {
         eventSourceRef.current.close();
     }
@@ -377,7 +411,6 @@ function App() {
     formData.append('rot_z', slicingParams.rotZ.toString());
     
     try {
-        // 2. Start the job and get a job ID
         const startResponse = await fetch('http://127.0.0.1:5000/api/slice/start', {
             method: 'POST',
             body: formData,
@@ -391,7 +424,6 @@ function App() {
         const { job_id } = await startResponse.json();
         if (!job_id) throw new Error("Did not receive a job_id from the server.");
 
-        // 3. Connect to the progress stream using EventSource
         setSlicingStatusMessage('Connecting to progress stream...');
         const eventSource = new EventSource(`http://127.0.0.1:5000/api/slice/progress/${job_id}`);
         eventSourceRef.current = eventSource;
@@ -400,7 +432,7 @@ function App() {
             const data = JSON.parse(event.data);
 
             setSlicingProgress(data.progress || 0);
-            setSlicingStatusMessage(data.status || ''); // <-- Update status message from backend
+            setSlicingStatusMessage(data.status || ''); 
 
             if (data.status === 'complete') {
                 const endTime = performance.now();
@@ -439,23 +471,68 @@ function App() {
   }, [stlFile, slicingParams]);
 
 
-  // --- Printing and other logic (no changes) ---
+  // --- NEW TEST PRINT LOGIC ---
+  const handleTestPrint = useCallback(() => {
+    // If it's currently running, stop it.
+    if (isTestPrinting) {
+        if (testPrintIntervalRef.current) {
+            clearInterval(testPrintIntervalRef.current);
+            testPrintIntervalRef.current = null;
+        }
+        setIsTestPrinting(false);
+        return;
+    }
+
+    // Pre-flight checks before starting
+    if (projectionImages.length === 0) {
+        alert("Please slice a model first to generate images.");
+        return;
+    }
+    if (presentationConnectionRef.current?.state !== 'connected') {
+        alert("Please connect to the second monitor from the 'Advanced' tab first.");
+        return;
+    }
+
+    // Start the test print
+    setIsTestPrinting(true);
+    let currentFrame = 0;
+    const frameDuration = printMode === 'time-per-frame' ? timePerFrame : 33; // Default ~30fps
+
+    testPrintIntervalRef.current = window.setInterval(() => {
+        if (presentationConnectionRef.current?.state === 'connected') {
+            const imageUrl = projectionImages[currentFrame];
+            presentationConnectionRef.current.send(JSON.stringify({ type: 'UPDATE_IMAGE', imageUrl }));
+            
+            currentFrame = (currentFrame + 1) % projectionImages.length;
+        } else {
+            // If the window gets disconnected during the test, stop it automatically.
+            if (testPrintIntervalRef.current) {
+                clearInterval(testPrintIntervalRef.current);
+                testPrintIntervalRef.current = null;
+            }
+            setIsTestPrinting(false);
+        }
+    }, frameDuration);
+  }, [isTestPrinting, projectionImages, timePerFrame, printMode]);
+
+
+  // --- Printing and other logic ---
   const stopPrint = useCallback(() => {
     if (printProcessRef.current.intervalId) {
-        clearInterval(printProcessRef.current.intervalId);
-        printProcessRef.current.intervalId = null;
+      clearInterval(printProcessRef.current.intervalId);
+      printProcessRef.current.intervalId = null;
     }
     setIsPrinting(false);
     setIsWaitingForHopTrigger(false);
     if (writeCharacteristic) {
-        const stopCommand = new Float32Array(6).fill(0);
-        writeCharacteristic.writeValue(stopCommand.buffer).catch(err => console.error("Error sending stop command:", err));
+      const stopCommand = new Float32Array(6).fill(0);
+      writeCharacteristic.writeValue(stopCommand.buffer).catch(err => console.error("Error sending stop command:", err));
     }
   }, [writeCharacteristic]);
 
   const handleESP32Notification = useCallback(() => {
     if (printMode === 'hops' && isPrinting && isWaitingForHopTrigger) {
-        setIsWaitingForHopTrigger(false);
+      setIsWaitingForHopTrigger(false);
     }
   }, [printMode, isPrinting, isWaitingForHopTrigger]);
 
@@ -509,6 +586,11 @@ function App() {
                 presentationConnectionRef.current = null;
             }
             stopPrint();
+            // --- NEW: Also stop test print on disconnect ---
+            if (testPrintIntervalRef.current) {
+                clearInterval(testPrintIntervalRef.current);
+                setIsTestPrinting(false);
+            }
         };
         connection.onclose = closeHandler;
         connection.onterminate = closeHandler;
@@ -527,7 +609,7 @@ function App() {
         }
     });
   }, [stopPrint]);
-  
+ 
   useEffect(() => {
     if (presentationConnectionRef.current?.state === 'connected') {
         presentationConnectionRef.current.send(JSON.stringify({ type: 'UPDATE_ALIGNMENT', params: alignmentParams }));
@@ -539,7 +621,7 @@ function App() {
   const handlePrint = useCallback(async () => { /* ... no changes ... */ }, []);
 
   // --- Rendering Logic ---
-  
+ 
   const TabButton: React.FC<{ tab: Tab }> = ({ tab }) => (
     <button
       onClick={() => setActiveTab(tab)}
@@ -558,7 +640,7 @@ function App() {
         return <SlicingTab 
             slicingParams={slicingParams} setSlicingParams={setSlicingParams} handleSlice={handleSlice}
             slicingStatus={slicingStatus} slicingProgress={slicingProgress} slicingStats={slicingStats}
-            slicingStatusMessage={slicingStatusMessage} // <-- Pass new prop
+            slicingStatusMessage={slicingStatusMessage} 
             fileName={fileName} setFileName={setFileName} setStlFile={setStlFile}
         />;
       case Tab.Projecting:
@@ -567,6 +649,11 @@ function App() {
             stopPrint={stopPrint} handlePair={handlePair} isPrinting={isPrinting} isConnected={isConnected} isAdmin={isAdmin} setIsAdmin={setIsAdmin}
             printMode={printMode} setPrintMode={setPrintMode} timePerFrame={timePerFrame} setTimePerFrame={setTimePerFrame}
             hopsPerTrigger={hopsPerTrigger} setHopsPerTrigger={setHopsPerTrigger} hopDelay={hopDelay} setHopDelay={setHopDelay}
+            // --- NEW PROPS PASSED ---
+            handleTestPrint={handleTestPrint}
+            isTestPrinting={isTestPrinting}
+            hasSlices={projectionImages.length > 0}
+            isProjectionWindowConnected={projectionWindowStatus === 'Connected'}
         />;
       case Tab.Advanced:
         return <AdvancedTab 
