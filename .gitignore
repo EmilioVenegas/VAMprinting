@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -46,3 +47,10 @@ __pycache__/
 # Ignore OS-generated files
 .DS_Store
 Thumbs.db
+=======
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[codz]
+*$py.class
+
+>>>>>>> 2d8b95e4721b478e0e1c5af8b72c7b765f9df28e
