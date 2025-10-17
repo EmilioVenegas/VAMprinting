@@ -15,7 +15,7 @@ import { saveAs } from 'file-saver';
 
 // --- ICONS  ---
 const UploadIcon = () => (
-    <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
     </svg>
 );
@@ -231,19 +231,16 @@ const ProjectingTab: React.FC<{
     isTestPrinting: boolean;
     hasSlices: boolean;
     isProjectionWindowConnected: boolean;
-    isSimulationMode: boolean;
-    setIsSimulationMode: (isSim: boolean) => void;
 }> = ({
     projectionParams, setProjectionParams, handlePrint, stopPrint, handlePair, isPrinting, isConnected, isAdmin, setIsAdmin,
     printMode, setPrintMode, timePerFrame, setTimePerFrame, hopsPerTrigger, setHopsPerTrigger, hopDelay, setHopDelay,
-    handleTestPrint, isTestPrinting, hasSlices, isProjectionWindowConnected, isSimulationMode, setIsSimulationMode
+    handleTestPrint, isTestPrinting, hasSlices, isProjectionWindowConnected
 }) => {
     return (
         <div className="space-y-6 flex flex-col items-center p-6">
             <button
                 onClick={handlePair}
-                disabled={isSimulationMode}
-                className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition ${isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-neutral-800 hover:bg-neutral-700'} disabled:bg-neutral-700/50 disabled:cursor-not-allowed`}
+                className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition ${isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-neutral-800 hover:bg-neutral-700'}`}
             >
                 {isConnected ? 'Device Paired' : 'Pair Device'}
             </button>
@@ -252,8 +249,8 @@ const ProjectingTab: React.FC<{
                 onClick={handleTestPrint}
                 disabled={!isProjectionWindowConnected || !hasSlices || isPrinting}
                 className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center
-                    ${isTestPrinting ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}
-                    disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
+                        ${isTestPrinting ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}
+                        disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
             >
                 {isTestPrinting ? <StopIcon /> : <PlayIcon />}
                 {isTestPrinting ? 'Stopping Simulation...' : 'Simulate Print'}
@@ -292,10 +289,6 @@ const ProjectingTab: React.FC<{
 
                 <SliderInput label="Total Rotation" min={90} max={360} value={projectionParams.totalRotation} onChange={val => setProjectionParams(p => ({ ...p, totalRotation: val }))} unit="°" />
                  <div className="flex justify-between items-center text-sm text-neutral-300">
-                    <label htmlFor="sim-mode">Simulation Mode</label>
-                    <input id="sim-mode" type="checkbox" checked={isSimulationMode} onChange={(e) => setIsSimulationMode(e.target.checked)} className="form-checkbox h-4 w-4 text-red-400 bg-neutral-700 border-neutral-600 rounded focus:ring-red-400" />
-                </div>
-                <div className="flex justify-between items-center text-sm text-neutral-300">
                     <label htmlFor="admin-mode">Admin Mode</label>
                     <input id="admin-mode" type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="form-checkbox h-4 w-4 text-red-400 bg-neutral-700 border-neutral-600 rounded focus:ring-red-400" />
                 </div>
@@ -314,7 +307,7 @@ const ProjectingTab: React.FC<{
                 )}
             </div>
 
-            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={(!isConnected && !isSimulationMode) || isTestPrinting || !hasSlices} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-x-2  ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-red-400 hover:bg-red-600'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
+            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={isTestPrinting || !hasSlices} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-x-2  ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-red-400 hover:bg-red-600'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
                 {isPrinting ? <StopIcon/> : <PrintIcon />}
                 {isPrinting ? 'Stop' : 'Print'}
             </button>
@@ -357,8 +350,8 @@ const AdvancedTab: React.FC<{
                 onClick={handleCalibration}
                 disabled={!isProjectionWindowConnected}
                 className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center
-                    ${isCalibrating ? 'bg-teal-600 hover:bg-teal-700' : 'bg-indigo-600 hover:bg-indigo-700'}
-                    disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
+                        ${isCalibrating ? 'bg-teal-600 hover:bg-teal-700' : 'bg-indigo-600 hover:bg-indigo-700'}
+                        disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
             >
                 <CalibrationIcon />
                 {isCalibrating ? 'Stop Calibration' : 'Calibrate'}
@@ -453,7 +446,7 @@ const ProjectionView: React.FC = () => {
             {!showCalibration && imageUrl ? (
                 <img src={imageUrl} alt="Projection" style={{ height: '100vh', transform, filter }} />
             ) : !showCalibration && (
-                <div className="text-white text-2xl">Waiting for connection...</div>
+                <div className="text-neutral-800 text-8xl font-black uppercase tracking-widest select-none">VAM</div>
             )}
         </div>
     );
@@ -499,7 +492,6 @@ function App() {
   const [hopDelay, setHopDelay] = useState(0.5); // seconds
   const [isTestPrinting, setIsTestPrinting] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
-  const [isSimulationMode, setIsSimulationMode] = useState(false);
 
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
@@ -677,11 +669,11 @@ function App() {
 
   const stopTestPrint = useCallback(() => {
     if (testPrintIntervalRef.current) {
-        clearInterval(testPrintIntervalRef.current);
-        testPrintIntervalRef.current = null;
+      clearInterval(testPrintIntervalRef.current);
+      testPrintIntervalRef.current = null;
     }
     if (presentationConnectionRef.current?.state === 'connected') {
-        presentationConnectionRef.current.send(JSON.stringify({ type: 'CLEAR_IMAGE' }));
+      presentationConnectionRef.current.send(JSON.stringify({ type: 'CLEAR_IMAGE' }));
     }
     setIsTestPrinting(false);
   }, []);
@@ -776,7 +768,7 @@ function App() {
         }
         setIsPrinting(false);
         setIsWaitingForHopTrigger(false);
-        if (writeCharacteristic && !isSimulationMode) {
+        if (writeCharacteristic) {
             const stopCommand = new Float32Array(6).fill(0);
             writeCharacteristic.writeValue(stopCommand.buffer).catch(err => {
                 console.error("Error sending stop command:", err);
@@ -786,7 +778,7 @@ function App() {
         if (presentationConnectionRef.current) {
             presentationConnectionRef.current.send(JSON.stringify({ type: 'CLEAR_IMAGE' }));
         }
-    }, [writeCharacteristic, isSimulationMode]);
+    }, [writeCharacteristic]);
 
 
   const handleESP32Notification = useCallback(() => {
@@ -895,7 +887,8 @@ function App() {
         return;
     }
 
-    if (isSimulationMode) {
+    // --- Simulation Logic ---
+    if (!isConnected) {
         setIsPrinting(true);
         printProcessRef.current.currentFrame = 0;
         const totalFrames = projectionImages.length;
@@ -915,13 +908,13 @@ function App() {
             if (printMode === 'time-per-frame') {
                 delay = timePerFrame;
             } else if (printMode === 'velocity') {
-                 const degreesPerFrame = projectionParams.totalRotation / totalFrames;
-                 delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+                const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
             }
              // For 'hops' mode, we simulate based on rotationSpeed as there's no trigger
             else if (printMode === 'hops') {
-                 const degreesPerFrame = projectionParams.totalRotation / totalFrames;
-                 delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+                const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
             }
 
             printProcessRef.current.timeoutId = window.setTimeout(runSimulationStep, delay);
@@ -991,7 +984,7 @@ function App() {
         toast.error(`Failed to send command: ${(error as Error).message}`);
         setIsPrinting(false);
     }
-}, [writeCharacteristic, isPrinting, stopPrint, projectionParams, isSimulationMode, projectionImages, printMode, timePerFrame]);
+}, [writeCharacteristic, isPrinting, stopPrint, projectionParams, isConnected, projectionImages, printMode, timePerFrame]);
 
 const handleExportJob = useCallback(async () => {
         if (slicingStatus !== 'complete' || projectionImages.length === 0) {
@@ -1128,8 +1121,6 @@ const handleExportJob = useCallback(async () => {
             isTestPrinting={isTestPrinting}
             hasSlices={projectionImages.length > 0}
             isProjectionWindowConnected={projectionWindowStatus === 'Connected'}
-            isSimulationMode={isSimulationMode}
-            setIsSimulationMode={setIsSimulationMode}
         />;
       case Tab.Advanced:
         return <AdvancedTab
@@ -1178,7 +1169,7 @@ const handleExportJob = useCallback(async () => {
         <Routes>
             <Route path="/projection" element={<ProjectionView />} />
             <Route path="/" element={
-                 <div className="h-screen bg-gradient-to-br from-neutral-900 to-black text-white flex flex-col sm:flex-row items-stretch overflow-hidden">
+                <div className="h-screen bg-gradient-to-br from-neutral-900 to-black text-white flex flex-col sm:flex-row items-stretch overflow-hidden">
                     <Toaster
                         position="bottom-center"
                         toastOptions={{
