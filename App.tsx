@@ -445,7 +445,8 @@ const ProjectionView: React.FC = () => {
                 <div className="absolute inset-0 flex items-center justify-center" style={{ transform }}>
                     <div className="relative" style={{ width: '80vmin', height: '80vmin' }}>
                         <div className="absolute top-0 left-1/2 bg-white w-1 h-full -translate-x-1/2"></div>
-                        <div className="absolute top-0 left-0 bg-white h-1 w-full"></div>
+                        <div className="absolute bottom-0 left-0 bg-white h-1 w-full"></div>
+                        <div className="absolute bottom-0 left-0 bg-white h-1 w-full"></div>
                     </div>
                 </div>
             )}
@@ -884,11 +885,17 @@ function App() {
         return;
     }
 
+    if (projectionImages.length === 0) {
+        toast.error("Please slice a model first to generate images.");
+        return;
+    }
+
+    if (presentationConnectionRef.current?.state !== 'connected') {
+        toast.error("Connect to second monitor first.");
+        return;
+    }
+
     if (isSimulationMode) {
-         if (presentationConnectionRef.current?.state !== 'connected') {
-            toast.error("Connect to second monitor for simulation.");
-            return;
-        }
         setIsPrinting(true);
         printProcessRef.current.currentFrame = 0;
         const totalFrames = projectionImages.length;
@@ -896,6 +903,7 @@ function App() {
         const runSimulationStep = () => {
              if (printProcessRef.current.currentFrame >= totalFrames) {
                 stopPrint();
+                toast.success("Print simulation completed!");
                 return;
             }
 
@@ -929,6 +937,8 @@ function App() {
     }
 
     setIsPrinting(true);
+    printProcessRef.current.currentFrame = 0;
+    const totalFrames = projectionImages.length;
 
     const degreesPerStep = 0.1125;
     const tomographicDelayMs = projectionParams.rotationSpeed > 0
@@ -947,6 +957,35 @@ function App() {
     try {
         await writeCharacteristic.writeValue(command.buffer);
         console.log("Print command sent successfully.");
+        toast.success("Print started!");
+
+        // Start projecting images
+        const runPrintStep = () => {
+            if (printProcessRef.current.currentFrame >= totalFrames) {
+                stopPrint();
+                toast.success("Print completed!");
+                return;
+            }
+
+            const imageUrl = projectionImages[printProcessRef.current.currentFrame];
+            presentationConnectionRef.current?.send(JSON.stringify({ type: 'UPDATE_IMAGE', imageUrl }));
+            printProcessRef.current.currentFrame++;
+
+            let delay = 100; // default
+            if (printMode === 'time-per-frame') {
+                delay = timePerFrame;
+            } else if (printMode === 'velocity') {
+                const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+            } else if (printMode === 'hops') {
+                const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+            }
+
+            printProcessRef.current.timeoutId = window.setTimeout(runPrintStep, delay);
+        };
+        
+        runPrintStep();
     } catch (error) {
         console.error("Error sending print command:", error);
         toast.error(`Failed to send command: ${(error as Error).message}`);
