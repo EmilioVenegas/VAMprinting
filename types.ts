@@ -112,3 +112,12 @@ declare global {
       new(urls: string[]): PresentationRequest;
   };
 }
+export interface SlicingProgressDetails {
+  stage: string;
+  status: string;
+  details?: {
+    current_step?: number;
+    total_steps?: number;
+    eta?: string;
+  };
+}

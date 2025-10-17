@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 progress_store = {}
 progress_lock = threading.Lock()
 
-# --- Constants for progress stages (improving readability) ---
+# --- Constants for progress stages  ---
 PROGRESS_MESH_LOADING = 5
 PROGRESS_VOXELIZING = 15
 PROGRESS_PROJECTION_START = 25
@@ -52,7 +52,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
     Handles errors and reports progress including ETA.
     """
     try:
-        # --- Stage 1: Loading & Centering ---
+        # --- Loading & Centering ---
         # Check if mesh is valid before proceeding
         if mesh.is_empty:
             raise ValueError("Provided STL file resulted in an empty mesh.")
@@ -69,15 +69,16 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             transform = trimesh.transformations.euler_matrix(np.deg2rad(rot_x), np.deg2rad(rot_y), np.deg2rad(rot_z), 'sxyz')
             mesh.apply_transform(transform)
 
-        # --- Stage 2: Voxelization ---
+        # --- Voxelization ---
         with progress_lock:
             progress_store[job_id] = {'progress': PROGRESS_VOXELIZING, 'stage': 'VOXELIZING', 'status': 'Voxelizing mesh...'}
         logger.info(f"Job {job_id}: Voxelizing mesh with pitch {pitch}.")
 
         # Voxelize and convert to float32 for scipy.ndimage.rotate
         voxel_grid = mesh.voxelized(pitch=pitch).fill().matrix.astype(np.float32)
+        
 
-        # --- Stage 3: Projecting ---
+        # --- Projecting ---
         with progress_lock:
             progress_store[job_id] = {'progress': PROGRESS_PROJECTION_START, 'stage': 'PROJECTING', 'status': 'Preparing for projection...'}
         logger.info(f"Job {job_id}: Preparing for projection for {num_angles} angles.")
@@ -92,7 +93,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
         theta = np.linspace(0., 360., num_angles, endpoint=False)
         
         projection_start_time = time.time()
-        processed_count_list = [] # Using a list to track count in parallel context
+        processed_count_list = [] 
 
         def process_and_update(angle, grid_to_process, angle_idx):
             """Wrapper for process_single_angle to update progress."""
@@ -102,24 +103,29 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
                 processed_count_list.append(1) # Increment count
                 current_count = len(processed_count_list)
 
-                # --- ETA Calculation Logic (with division by zero prevention) ---
+                # --- ETA Calculation Logic  ---
                 elapsed_time = time.time() - projection_start_time
                 avg_time_per_projection = 0
                 eta_seconds = 0
-                eta_str = "Calculating ETA..."
+                eta_str = "Calculating..."
 
-                if current_count > 0:
+                if current_count > 1: # Start calculating after the first projection
                     avg_time_per_projection = elapsed_time / current_count
                     remaining_projections = num_angles - current_count
                     eta_seconds = int(avg_time_per_projection * remaining_projections)
-                    eta_str = f"{eta_seconds // 60}m {eta_seconds % 60}s" if eta_seconds > 0 else "Almost done..."
+                    eta_str = f"ETA: {eta_seconds // 60}m {eta_seconds % 60}s" if eta_seconds > 0 else "Almost done..."
                 
                 # Progress calculation (from PROGRESS_PROJECTION_START to PROGRESS_ENCODING_START)
                 progress = PROGRESS_PROJECTION_START + int((current_count / num_angles) * PROGRESS_PROJECTION_SECTION)
                 progress_store[job_id] = {
                     'progress': progress, 
                     'stage': 'PROJECTING',
-                    'status': f'Generating projection {current_count}/{num_angles} (ETA: {eta_str})'
+                    'status': f'Generating projection {current_count}/{num_angles}',
+                    'details': {
+                        'current_step': current_count,
+                        'total_steps': num_angles,
+                        'eta': eta_str
+                    }
                 }
             return result
 
@@ -131,7 +137,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
         logger.info(f"Job {job_id}: Finished generating {len(projection_stack)} projections.")
 
 
-        # --- Stage 4: Encoding ---
+        # --- Encoding ---
         with progress_lock:
             progress_store[job_id] = {'progress': PROGRESS_ENCODING_START, 'stage': 'ENCODING', 'status': 'Encoding images...'}
         logger.info(f"Job {job_id}: Starting image encoding.")
@@ -147,7 +153,11 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
                 progress_store[job_id] = {
                     'progress': progress, 
                     'stage': 'ENCODING',
-                    'status': f'Encoding image {i+1}/{len(projection_stack)}'
+                    'status': f'Encoding image {i+1}/{len(projection_stack)}',
+                    'details': {
+                        'current_step': i + 1,
+                        'total_steps': len(projection_stack)
+                    }
                 }
             
             # Normalize projection to 0-255 range for image conversion
@@ -158,11 +168,11 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             if p_max > p_min:
                 p_norm = ((projection_2d - p_min) / (p_max - p_min)) * 255
             else:
-                # If all values are the same (e.g., all zeros), make it a black image
+                # If all values are the same make it a black image
                 p_norm = np.zeros_like(projection_2d, dtype=np.uint8)
             
             # Convert to PIL Image and then to Base64
-            img = Image.fromarray(p_norm.astype(np.uint8), 'L') # 'L' for grayscale
+            img = Image.fromarray(p_norm.astype(np.uint8), 'L') 
             buffered = io.BytesIO()
             img.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')

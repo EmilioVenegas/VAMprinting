@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { Tab, SlicingParams, ProjectionParams, AlignmentParams, PrintMode, PresentationConnection, SlicingStatus, SlicingStats } from './types';
+import { Tab, SlicingParams, ProjectionParams, AlignmentParams, PrintMode, PresentationConnection, SlicingStatus, SlicingStats, SlicingProgressDetails } from './types';
 import type { BluetoothRemoteGATTCharacteristic } from './types';
 import SliderInput from './components/SliderInput';
 import STLViewer from './components/STLViewer';
@@ -57,12 +57,13 @@ const SlicingTab: React.FC<{
     slicingProgress: number;
     slicingStats: SlicingStats;
     slicingStatusMessage: string;
+    slicingProgressDetails: SlicingProgressDetails | null;
     fileName: string | null;
     setFileName: (name: string | null) => void;
     setStlFile: (file: File | null) => void;
     handleExportJob: () => void;
     handleImportJob: (event: React.ChangeEvent<HTMLInputElement>) => void;
-}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, fileName, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
+}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, slicingProgressDetails, fileName, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
 
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,12 +139,12 @@ const SlicingTab: React.FC<{
             <p className="text-sm text-neutral-500 h-5">{fileName || "No File Selected"}</p>
 
             <div className="w-full max-w-sm grid grid-cols-2 gap-4">
-                 <button onClick={() => importInputRef.current?.click()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition">
+                 <button onClick={() => importInputRef.current?.click()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 text-sm rounded-md transition">
                     Import Job
                 </button>
                 <input type="file" ref={importInputRef} className="hidden" accept=".zip" onChange={handleImportJob} />
 
-                <button onClick={handleExportJob} disabled={slicingStatus !== 'complete'} className="w-full bg-green-600 hover:bg-green-700 disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md transition">
+                <button onClick={handleExportJob} disabled={slicingStatus !== 'complete'} className="w-full bg-green-600 hover:bg-green-700 disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white font-bold py-1 px-3 text-sm rounded-md transition">
                     Export Job
                 </button>
             </div>
@@ -170,14 +171,24 @@ const SlicingTab: React.FC<{
             </button>
 
             <div className="w-full max-w-sm h-12 mt-2">
-                {isSlicing && (
+                {isSlicing && slicingProgressDetails && (
                     <div className="w-full">
                         <div className="w-full bg-neutral-700 rounded-full h-2.5">
                             <div className="bg-red-400 h-2.5 rounded-full" style={{ width: `${slicingProgress}%`, transition: 'width 0.2s ease-in-out' }}></div>
                         </div>
-                        <p className="text-center text-sm text-neutral-400 mt-1 truncate" title={slicingStatusMessage}>
-                            {Math.round(slicingProgress)}% - {slicingStatusMessage}
-                        </p>
+                         <div className="flex justify-between items-center text-sm text-neutral-400 mt-1">
+                            <span className="truncate capitalize" title={slicingProgressDetails.status}>
+                                {Math.round(slicingProgress)}% - {slicingProgressDetails.stage.toLowerCase()}
+                            </span>
+                            <div className="flex-shrink-0">
+                                {slicingProgressDetails.details?.current_step && slicingProgressDetails.details?.total_steps && (
+                                    <span className="font-mono text-xs">{slicingProgressDetails.details.current_step} / {slicingProgressDetails.details.total_steps}</span>
+                                )}
+                                {slicingProgressDetails.details?.eta && (
+                                    <span className="ml-2 font-mono text-xs">{slicingProgressDetails.details.eta}</span>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
                 {slicingStatus === 'complete' && slicingStats.time !== null && (
@@ -474,6 +485,7 @@ function App() {
   const [slicingProgress, setSlicingProgress] = useState(0);
   const [slicingStats, setSlicingStats] = useState<SlicingStats>({ time: null, count: null });
   const [slicingStatusMessage, setSlicingStatusMessage] = useState('');
+  const [slicingProgressDetails, setSlicingProgressDetails] = useState<SlicingProgressDetails | null>(null);
   const sliceStartTimeRef = useRef<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -573,7 +585,8 @@ function App() {
 
     setSlicingStatus('slicing');
     setSlicingProgress(0);
-    setSlicingStatusMessage('Preparing to slice...');
+    setSlicingStatusMessage('');
+    setSlicingProgressDetails({ stage: 'IDLE', status: 'Initializing...' });
     setSlicingStats({ time: null, count: null });
     setProjectionImages([]);
     sliceStartTimeRef.current = performance.now();
@@ -604,7 +617,7 @@ function App() {
         const { job_id } = await startResponse.json();
         if (!job_id) throw new Error("Did not receive a job_id from the server.");
 
-        setSlicingStatusMessage('Connecting to progress stream...');
+        setSlicingProgressDetails({ stage: 'CONNECTING', status: 'Connecting to progress stream...' });
         const eventSource = new EventSource(`http://127.0.0.1:5000/api/slice/progress/${job_id}`);
         eventSourceRef.current = eventSource;
 
@@ -612,7 +625,8 @@ function App() {
             const data = JSON.parse(event.data);
 
             setSlicingProgress(data.progress || 0);
-            setSlicingStatusMessage(data.status || '');
+            setSlicingProgressDetails(data);
+
 
             if (data.status === 'complete') {
                 const endTime = performance.now();
@@ -623,6 +637,7 @@ function App() {
 
                 setSlicingStatus('complete');
                 setSlicingStats({ time: duration, count: imagesWithPrefix.length });
+                setSlicingProgressDetails(null);
                 toast.success("Slicing completed successfully!");
 
                 eventSource.close();
@@ -631,7 +646,8 @@ function App() {
                 console.error("Slicing failed on backend:", data.error);
                 setSlicingStatus('failed');
                 setSlicingStatusMessage(data.error || 'An unknown error occurred.');
-                 toast.error(`Slicing failed: ${data.error || 'Unknown reason'}`);
+                setSlicingProgressDetails(null);
+                toast.error(`Slicing failed: ${data.error || 'Unknown reason'}`);
                 eventSource.close();
                 eventSourceRef.current = null;
             }
@@ -641,7 +657,8 @@ function App() {
             console.error("EventSource failed:", err);
             setSlicingStatus('failed');
             setSlicingStatusMessage('Connection to server lost.');
-             toast.error("Connection to slicing server lost.");
+            setSlicingProgressDetails(null);
+            toast.error("Connection to slicing server lost.");
             eventSource.close();
             eventSourceRef.current = null;
         };
@@ -651,6 +668,7 @@ function App() {
         setSlicingStatus('failed');
         const errorMessage = (error as Error).message;
         setSlicingStatusMessage(errorMessage);
+        setSlicingProgressDetails(null);
         toast.error(`Slicing failed: ${errorMessage}`);
     }
   }, [stlFile, slicingParams]);
@@ -1056,6 +1074,7 @@ const handleExportJob = useCallback(async () => {
             slicingParams={slicingParams} setSlicingParams={setSlicingParams} handleSlice={handleSlice}
             slicingStatus={slicingStatus} slicingProgress={slicingProgress} slicingStats={slicingStats}
             slicingStatusMessage={slicingStatusMessage}
+            slicingProgressDetails={slicingProgressDetails}
             fileName={fileName} setFileName={setFileName} setStlFile={setStlFile}
             handleExportJob={handleExportJob}
             handleImportJob={handleImportJob}
