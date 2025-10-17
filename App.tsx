@@ -124,7 +124,7 @@ const SlicingTab: React.FC<{
     );
 };
 
-// --- ProjectingTab COMPONENT (MODIFIED) ---
+// --- ProjectingTab COMPONENT (No changes) ---
 const ProjectingTab: React.FC<{
     projectionParams: ProjectionParams;
     setProjectionParams: React.Dispatch<React.SetStateAction<ProjectionParams>>;
@@ -475,22 +475,22 @@ function App() {
   const handleTestPrint = useCallback(() => {
     // If it's currently running, stop it.
     if (isTestPrinting) {
-        if (testPrintIntervalRef.current) {
-            clearInterval(testPrintIntervalRef.current);
-            testPrintIntervalRef.current = null;
-        }
-        setIsTestPrinting(false);
-        return;
+      if (testPrintIntervalRef.current) {
+        clearInterval(testPrintIntervalRef.current);
+        testPrintIntervalRef.current = null;
+      }
+      setIsTestPrinting(false);
+      return;
     }
 
     // Pre-flight checks before starting
     if (projectionImages.length === 0) {
-        alert("Please slice a model first to generate images.");
-        return;
+      alert("Please slice a model first to generate images.");
+      return;
     }
     if (presentationConnectionRef.current?.state !== 'connected') {
-        alert("Please connect to the second monitor from the 'Advanced' tab first.");
-        return;
+      alert("Please connect to the second monitor from the 'Advanced' tab first.");
+      return;
     }
 
     // Start the test print
@@ -499,19 +499,19 @@ function App() {
     const frameDuration = printMode === 'time-per-frame' ? timePerFrame : 33; // Default ~30fps
 
     testPrintIntervalRef.current = window.setInterval(() => {
-        if (presentationConnectionRef.current?.state === 'connected') {
-            const imageUrl = projectionImages[currentFrame];
-            presentationConnectionRef.current.send(JSON.stringify({ type: 'UPDATE_IMAGE', imageUrl }));
-            
-            currentFrame = (currentFrame + 1) % projectionImages.length;
-        } else {
-            // If the window gets disconnected during the test, stop it automatically.
-            if (testPrintIntervalRef.current) {
-                clearInterval(testPrintIntervalRef.current);
-                testPrintIntervalRef.current = null;
-            }
-            setIsTestPrinting(false);
+      if (presentationConnectionRef.current?.state === 'connected') {
+        const imageUrl = projectionImages[currentFrame];
+        presentationConnectionRef.current.send(JSON.stringify({ type: 'UPDATE_IMAGE', imageUrl }));
+        
+        currentFrame = (currentFrame + 1) % projectionImages.length;
+      } else {
+        // If the window gets disconnected during the test, stop it automatically.
+        if (testPrintIntervalRef.current) {
+          clearInterval(testPrintIntervalRef.current);
+          testPrintIntervalRef.current = null;
         }
+        setIsTestPrinting(false);
+      }
     }, frameDuration);
   }, [isTestPrinting, projectionImages, timePerFrame, printMode]);
 
@@ -618,7 +618,56 @@ function App() {
 
   const sendNextHopCommand = useCallback(async () => { /* ... no changes ... */ }, []);
   useEffect(() => { /* ... no changes ... */ }, []);
-  const handlePrint = useCallback(async () => { /* ... no changes ... */ }, []);
+  
+  // --- MODIFIED FUNCTION ---
+  const handlePrint = useCallback(async () => {
+    if (!writeCharacteristic) {
+        alert("BLE device is not connected.");
+        return;
+    }
+    if (isPrinting) {
+        // This case should be handled by the stopPrint button, but as a safeguard:
+        stopPrint();
+        return;
+    }
+
+    setIsPrinting(true);
+
+    // This logic is based on the 'velocity' print mode.
+    // The ESP32 code decrements rotation by 0.1125 degrees per step.
+    const degreesPerStep = 0.1125;
+
+    // Calculate the required delay between tomographic steps (in milliseconds)
+    // from the user-provided speed in degrees per second.
+    const tomographicDelayMs = projectionParams.rotationSpeed > 0
+        ? (degreesPerStep / projectionParams.rotationSpeed) * 1000
+        : 0;
+
+    // WORKAROUND for the bug in ESP32 code: delay(values[2] * 1000).
+    // The app must send the desired pause duration in seconds.
+    // The `pauseAfterRotation` parameter is not exposed in the UI, so it defaults to 0.
+    const pauseInSeconds = (projectionParams.pauseAfterRotation || 0) / 1000;
+
+    // The ESP32 expects a payload of 6 float values.
+    const command = new Float32Array(6);
+    command[0] = projectionParams.totalRotation;       // Total degrees for tomographic rotation.
+    command[1] = tomographicDelayMs;                   // Delay between tomographic steps in ms.
+    command[2] = pauseInSeconds;                       // Pause after rotation in seconds (WORKAROUND).
+    command[3] = projectionParams.verticalSteps;       // Total steps for vertical movement.
+    command[4] = projectionParams.verticalDelay;       // Delay between vertical steps in µs.
+    command[5] = projectionParams.verticalDirection;   // Direction for vertical movement (1 for Up, 0 for Down).
+
+    try {
+        // Send the command as a raw binary buffer (24 bytes).
+        await writeCharacteristic.writeValue(command.buffer);
+        console.log("Print command sent successfully.");
+    } catch (error) {
+        console.error("Error sending print command:", error);
+        alert(`Failed to send command to device: ${(error as Error).message}`);
+        setIsPrinting(false); // Ensure printing state is reset on failure.
+    }
+}, [writeCharacteristic, isPrinting, stopPrint, projectionParams]);
+
 
   // --- Rendering Logic ---
  
