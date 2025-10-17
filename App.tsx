@@ -8,6 +8,10 @@ import SliderInput from './components/SliderInput';
 import STLViewer from './components/STLViewer';
 import SlicePreview from './components/SlicePreview';
 import { io, Socket } from 'socket.io-client';
+import toast, { Toaster } from 'react-hot-toast';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+
 
 // --- ICONS  ---
 const UploadIcon = () => (
@@ -56,29 +60,93 @@ const SlicingTab: React.FC<{
     fileName: string | null;
     setFileName: (name: string | null) => void;
     setStlFile: (file: File | null) => void;
-}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, fileName, setFileName, setStlFile }) => {
+    handleExportJob: () => void;
+    handleImportJob: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, fileName, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const importInputRef = useRef<HTMLInputElement>(null);
+
+    const processFile = (file: File) => {
+        if (file && file.name.toLowerCase().endsWith('.stl')) {
             setFileName(file.name);
             setStlFile(file);
         } else {
+            toast.error("Please select a valid .stl file.");
             setFileName(null);
             setStlFile(null);
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            processFile(file);
+        }
+    };
+
+    const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            processFile(file);
+             if (fileInputRef.current) {
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInputRef.current.files = dataTransfer.files;
+            }
+        }
+    };
+
+
     const isSlicing = slicingStatus === 'slicing';
 
     return (
         <div className="space-y-6 flex flex-col items-center p-6">
-            <label className="w-full max-w-sm cursor-pointer bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold py-2 px-4 rounded-md inline-flex items-center justify-center transition">
+            <label
+                htmlFor="stl-upload"
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`w-full max-w-sm cursor-pointer border-2 border-dashed  text-neutral-200 font-bold py-4 px-4 rounded-md inline-flex flex-col items-center justify-center transition-all duration-300
+                ${isDragging ? 'border-red-400 bg-neutral-800/50' : 'border-neutral-700 bg-neutral-800 hover:bg-neutral-700 hover:border-neutral-600'}`}>
                 <UploadIcon />
-                <span>Upload STL File</span>
-                <input type="file" className="hidden" accept=".stl" onChange={handleFileChange} />
+                <span className="mt-2 text-center">{isDragging ? 'Drop STL file here' : 'Click or Drag & Drop STL File'}</span>
+                <input ref={fileInputRef} id="stl-upload" type="file" className="hidden" accept=".stl" onChange={handleFileChange} />
             </label>
             <p className="text-sm text-neutral-500 h-5">{fileName || "No File Selected"}</p>
+
+            <div className="w-full max-w-sm grid grid-cols-2 gap-4">
+                 <button onClick={() => importInputRef.current?.click()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition">
+                    Import Job
+                </button>
+                <input type="file" ref={importInputRef} className="hidden" accept=".zip" onChange={handleImportJob} />
+
+                <button onClick={handleExportJob} disabled={slicingStatus !== 'complete'} className="w-full bg-green-600 hover:bg-green-700 disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md transition">
+                    Export Job
+                </button>
+            </div>
 
             <div className="w-full max-w-sm space-y-4">
                 <SliderInput label="Voxel Size" min={0.05} max={2.0} step={0.1} value={slicingParams.voxelSize} onChange={val => setSlicingParams(p => ({ ...p, voxelSize: val }))} />
@@ -152,14 +220,20 @@ const ProjectingTab: React.FC<{
     isTestPrinting: boolean;
     hasSlices: boolean;
     isProjectionWindowConnected: boolean;
+    isSimulationMode: boolean;
+    setIsSimulationMode: (isSim: boolean) => void;
 }> = ({
     projectionParams, setProjectionParams, handlePrint, stopPrint, handlePair, isPrinting, isConnected, isAdmin, setIsAdmin,
     printMode, setPrintMode, timePerFrame, setTimePerFrame, hopsPerTrigger, setHopsPerTrigger, hopDelay, setHopDelay,
-    handleTestPrint, isTestPrinting, hasSlices, isProjectionWindowConnected
+    handleTestPrint, isTestPrinting, hasSlices, isProjectionWindowConnected, isSimulationMode, setIsSimulationMode
 }) => {
     return (
         <div className="space-y-6 flex flex-col items-center p-6">
-            <button onClick={handlePair} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition ${isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-neutral-800 hover:bg-neutral-700'}`}>
+            <button
+                onClick={handlePair}
+                disabled={isSimulationMode}
+                className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition ${isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-neutral-800 hover:bg-neutral-700'} disabled:bg-neutral-700/50 disabled:cursor-not-allowed`}
+            >
                 {isConnected ? 'Device Paired' : 'Pair Device'}
             </button>
 
@@ -171,7 +245,7 @@ const ProjectingTab: React.FC<{
                     disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}
             >
                 {isTestPrinting ? <StopIcon /> : <PlayIcon />}
-                {isTestPrinting ? 'Stop Test' : 'Test on Second Monitor'}
+                {isTestPrinting ? 'Stopping Simulation...' : 'Simulate Print'}
             </button>
 
 
@@ -206,7 +280,10 @@ const ProjectingTab: React.FC<{
                 )}
 
                 <SliderInput label="Total Rotation" min={90} max={360} value={projectionParams.totalRotation} onChange={val => setProjectionParams(p => ({ ...p, totalRotation: val }))} unit="°" />
-
+                 <div className="flex justify-between items-center text-sm text-neutral-300">
+                    <label htmlFor="sim-mode">Simulation Mode</label>
+                    <input id="sim-mode" type="checkbox" checked={isSimulationMode} onChange={(e) => setIsSimulationMode(e.target.checked)} className="form-checkbox h-4 w-4 text-red-400 bg-neutral-700 border-neutral-600 rounded focus:ring-red-400" />
+                </div>
                 <div className="flex justify-between items-center text-sm text-neutral-300">
                     <label htmlFor="admin-mode">Admin Mode</label>
                     <input id="admin-mode" type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="form-checkbox h-4 w-4 text-red-400 bg-neutral-700 border-neutral-600 rounded focus:ring-red-400" />
@@ -226,7 +303,7 @@ const ProjectingTab: React.FC<{
                 )}
             </div>
 
-            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={!isConnected || isTestPrinting} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-x-2  ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-red-400 hover:bg-red-600'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
+            <button onClick={isPrinting ? stopPrint : handlePrint} disabled={(!isConnected && !isSimulationMode) || isTestPrinting || !hasSlices} className={`w-full max-w-sm font-bold py-2 px-4 rounded-md transition flex items-center justify-center gap-x-2  ${isPrinting ? 'bg-red-600 hover:bg-red-700' : 'bg-red-400 hover:bg-red-600'} disabled:bg-neutral-500/50 disabled:cursor-not-allowed text-white`}>
                 {isPrinting ? <StopIcon/> : <PrintIcon />}
                 {isPrinting ? 'Stop' : 'Print'}
             </button>
@@ -242,8 +319,8 @@ const AdvancedTab: React.FC<{
     projectionWindowStatus: string;
     handleCalibration: () => void;
     isCalibrating: boolean;
-    handleSaveOffset: () => void;    // <-- NEW
-    handleResetOffset: () => void;   // <-- NEW
+    handleSaveOffset: () => void;
+    handleResetOffset: () => void;
 }> = ({ alignmentParams, setAlignmentParams, openProjectionWindow, projectionWindowStatus, handleCalibration, isCalibrating, handleSaveOffset, handleResetOffset }) => {
     const isProjectionWindowConnected = projectionWindowStatus === 'Connected';
     const buttonText = (() => {
@@ -276,7 +353,6 @@ const AdvancedTab: React.FC<{
                 {isCalibrating ? 'Stop Calibration' : 'Calibrate'}
             </button>
 
-            {/* --- CONDITIONAL BUTTONS FOR CALIBRATION --- */}
             {isCalibrating && (
                 <div className="w-full max-w-sm grid grid-cols-2 gap-4 mt-4">
                     <button
@@ -410,6 +486,7 @@ function App() {
   const [hopDelay, setHopDelay] = useState(0.5); // seconds
   const [isTestPrinting, setIsTestPrinting] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
 
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
@@ -419,13 +496,13 @@ function App() {
   const presentationConnectionRef = useRef<PresentationConnection | null>(null);
   const [projectionWindowStatus, setProjectionWindowStatus] = useState('Disconnected');
 
-  const printProcessRef = useRef<{ currentFrame: number; intervalId: number | null }>({ currentFrame: 0, intervalId: null });
+  const printProcessRef = useRef<{ currentFrame: number; intervalId: number | null; timeoutId?: number | null }>({ currentFrame: 0, intervalId: null, timeoutId: null });
   const testPrintIntervalRef = useRef<number | null>(null);
 
-  
+
   const CALIBRATION_OFFSET_KEY = 'vam-calibration-offset';
 
-  
+
   useEffect(() => {
     try {
         const savedOffsetJSON = localStorage.getItem(CALIBRATION_OFFSET_KEY);
@@ -443,7 +520,38 @@ function App() {
     } catch (error) {
         console.error("Failed to load or parse calibration offset from localStorage:", error);
     }
-  }, []); 
+  }, []);
+
+  // Keyboard controls for calibration
+  useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!isCalibrating) return;
+
+            e.preventDefault();
+
+            const step = e.shiftKey ? 10 : (e.ctrlKey || e.metaKey ? 0.1 : 1);
+
+            setAlignmentParams(prev => {
+                switch (e.key) {
+                    case 'ArrowUp':
+                        return { ...prev, translateY: prev.translateY - step };
+                    case 'ArrowDown':
+                        return { ...prev, translateY: prev.translateY + step };
+                    case 'ArrowLeft':
+                        return { ...prev, translateX: prev.translateX - step };
+                    case 'ArrowRight':
+                        return { ...prev, translateX: prev.translateX + step };
+                    default:
+                        return prev;
+                }
+            });
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isCalibrating]);
 
 
   useEffect(() => {
@@ -459,7 +567,7 @@ function App() {
 
   const handleSlice = useCallback(async () => {
     if (!stlFile) {
-        alert("Please upload an STL file first.");
+        toast.error("Please upload an STL file first.");
         return;
     }
 
@@ -515,6 +623,7 @@ function App() {
 
                 setSlicingStatus('complete');
                 setSlicingStats({ time: duration, count: imagesWithPrefix.length });
+                toast.success("Slicing completed successfully!");
 
                 eventSource.close();
                 eventSourceRef.current = null;
@@ -522,6 +631,7 @@ function App() {
                 console.error("Slicing failed on backend:", data.error);
                 setSlicingStatus('failed');
                 setSlicingStatusMessage(data.error || 'An unknown error occurred.');
+                 toast.error(`Slicing failed: ${data.error || 'Unknown reason'}`);
                 eventSource.close();
                 eventSourceRef.current = null;
             }
@@ -531,6 +641,7 @@ function App() {
             console.error("EventSource failed:", err);
             setSlicingStatus('failed');
             setSlicingStatusMessage('Connection to server lost.');
+             toast.error("Connection to slicing server lost.");
             eventSource.close();
             eventSourceRef.current = null;
         };
@@ -538,7 +649,9 @@ function App() {
     } catch (error) {
         console.error("Slicing failed:", error);
         setSlicingStatus('failed');
-        setSlicingStatusMessage((error as Error).message);
+        const errorMessage = (error as Error).message;
+        setSlicingStatusMessage(errorMessage);
+        toast.error(`Slicing failed: ${errorMessage}`);
     }
   }, [stlFile, slicingParams]);
 
@@ -561,11 +674,11 @@ function App() {
     }
 
     if (projectionImages.length === 0) {
-      alert("Please slice a model first to generate images.");
+      toast.error("Please slice a model first to generate images.");
       return;
     }
     if (presentationConnectionRef.current?.state !== 'connected') {
-      alert("Please connect to the second monitor from the 'Advanced' tab first.");
+      toast.error("Please connect to the second monitor from the 'Advanced' tab first.");
       return;
     }
     if (isCalibrating) {
@@ -590,7 +703,7 @@ function App() {
 
   const handleCalibration = useCallback(() => {
     if (presentationConnectionRef.current?.state !== 'connected') {
-        alert("Please connect to the second monitor first.");
+        toast.error("Please connect to the second monitor first.");
         return;
     }
     if (isTestPrinting) {
@@ -603,7 +716,7 @@ function App() {
 
   }, [isCalibrating, isTestPrinting, stopTestPrint]);
 
-  
+
   const handleSaveOffset = useCallback(() => {
     try {
         const offset = {
@@ -611,10 +724,10 @@ function App() {
             y: alignmentParams.translateY,
         };
         localStorage.setItem(CALIBRATION_OFFSET_KEY, JSON.stringify(offset));
-        alert(`Offset saved:\nX: ${offset.x}px\nY: ${offset.y}px`);
+        toast.success(`Offset saved: X=${offset.x}, Y=${offset.y}`);
     } catch (error) {
         console.error("Failed to save calibration offset to localStorage:", error);
-        alert("Error: Could not save the offset. Your browser might be in private mode or has storage disabled.");
+        toast.error("Could not save the offset.");
     }
   }, [alignmentParams.translateX, alignmentParams.translateY]);
 
@@ -626,25 +739,36 @@ function App() {
             translateX: 0,
             translateY: 0,
         }));
-        alert("Calibration offset has been reset to zero.");
+        toast.success("Offset has been reset.");
     } catch (error) {
         console.error("Failed to remove calibration offset from localStorage:", error);
+        toast.error("Could not reset the offset.");
     }
-  }, []); 
+  }, []);
 
+ const stopPrint = useCallback(() => {
+        if (printProcessRef.current.intervalId) {
+            clearInterval(printProcessRef.current.intervalId);
+            printProcessRef.current.intervalId = null;
+        }
+        if (printProcessRef.current.timeoutId) {
+            clearTimeout(printProcessRef.current.timeoutId);
+            printProcessRef.current.timeoutId = null;
+        }
+        setIsPrinting(false);
+        setIsWaitingForHopTrigger(false);
+        if (writeCharacteristic && !isSimulationMode) {
+            const stopCommand = new Float32Array(6).fill(0);
+            writeCharacteristic.writeValue(stopCommand.buffer).catch(err => {
+                console.error("Error sending stop command:", err);
+                toast.error("Failed to send stop command.");
+            });
+        }
+        if (presentationConnectionRef.current) {
+            presentationConnectionRef.current.send(JSON.stringify({ type: 'CLEAR_IMAGE' }));
+        }
+    }, [writeCharacteristic, isSimulationMode]);
 
-  const stopPrint = useCallback(() => {
-    if (printProcessRef.current.intervalId) {
-      clearInterval(printProcessRef.current.intervalId);
-      printProcessRef.current.intervalId = null;
-    }
-    setIsPrinting(false);
-    setIsWaitingForHopTrigger(false);
-    if (writeCharacteristic) {
-      const stopCommand = new Float32Array(6).fill(0);
-      writeCharacteristic.writeValue(stopCommand.buffer).catch(err => console.error("Error sending stop command:", err));
-    }
-  }, [writeCharacteristic]);
 
   const handleESP32Notification = useCallback(() => {
     if (printMode === 'hops' && isPrinting && isWaitingForHopTrigger) {
@@ -664,6 +788,7 @@ function App() {
       device.addEventListener('gattserverdisconnected', () => {
         setIsConnected(false);
         setWriteCharacteristic(null);
+        toast("Bluetooth device disconnected.", { icon: 'ℹ️' });
         stopPrint();
       });
 
@@ -677,9 +802,10 @@ function App() {
 
       setWriteCharacteristic(writeChar);
       setIsConnected(true);
+      toast.success("Bluetooth device connected!");
     } catch (error) {
       console.error("BLE Connection Error:", error);
-      alert((error as Error).message);
+      toast.error((error as Error).message);
     }
   }, [handleESP32Notification, stopPrint]);
 
@@ -695,6 +821,7 @@ function App() {
     const setupConnection = (connection: PresentationConnection) => {
         presentationConnectionRef.current = connection;
         setProjectionWindowStatus('Connected');
+        toast.success("Projection window connected.");
 
         const closeHandler = () => {
             setProjectionWindowStatus('Disconnected');
@@ -717,6 +844,7 @@ function App() {
         if (error.name !== 'NotAllowedError') {
              setProjectionWindowStatus(`Error: ${error.message}`);
              console.error('Presentation API start failed:', error);
+             toast.error("Failed to open projection window.");
         } else {
              setProjectionWindowStatus('Disconnected');
         }
@@ -733,12 +861,52 @@ function App() {
   useEffect(() => { /* ... no changes ... */ }, []);
 
   const handlePrint = useCallback(async () => {
-    if (!writeCharacteristic) {
-        alert("BLE device is not connected.");
-        return;
-    }
     if (isPrinting) {
         stopPrint();
+        return;
+    }
+
+    if (isSimulationMode) {
+         if (presentationConnectionRef.current?.state !== 'connected') {
+            toast.error("Connect to second monitor for simulation.");
+            return;
+        }
+        setIsPrinting(true);
+        printProcessRef.current.currentFrame = 0;
+        const totalFrames = projectionImages.length;
+
+        const runSimulationStep = () => {
+             if (printProcessRef.current.currentFrame >= totalFrames) {
+                stopPrint();
+                return;
+            }
+
+            const imageUrl = projectionImages[printProcessRef.current.currentFrame];
+            presentationConnectionRef.current?.send(JSON.stringify({ type: 'UPDATE_IMAGE', imageUrl }));
+            printProcessRef.current.currentFrame++;
+
+            let delay = 100; // default
+            if (printMode === 'time-per-frame') {
+                delay = timePerFrame;
+            } else if (printMode === 'velocity') {
+                 const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                 delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+            }
+             // For 'hops' mode, we simulate based on rotationSpeed as there's no trigger
+            else if (printMode === 'hops') {
+                 const degreesPerFrame = projectionParams.totalRotation / totalFrames;
+                 delay = (degreesPerFrame / projectionParams.rotationSpeed) * 1000;
+            }
+
+            printProcessRef.current.timeoutId = window.setTimeout(runSimulationStep, delay);
+        };
+        runSimulationStep();
+        return;
+    }
+
+    // --- Regular BLE Print Logic ---
+    if (!writeCharacteristic) {
+        toast.error("BLE device is not connected.");
         return;
     }
 
@@ -763,10 +931,110 @@ function App() {
         console.log("Print command sent successfully.");
     } catch (error) {
         console.error("Error sending print command:", error);
-        alert(`Failed to send command to device: ${(error as Error).message}`);
+        toast.error(`Failed to send command: ${(error as Error).message}`);
         setIsPrinting(false);
     }
-}, [writeCharacteristic, isPrinting, stopPrint, projectionParams]);
+}, [writeCharacteristic, isPrinting, stopPrint, projectionParams, isSimulationMode, projectionImages, printMode, timePerFrame]);
+
+const handleExportJob = useCallback(async () => {
+        if (slicingStatus !== 'complete' || projectionImages.length === 0) {
+            toast.error("Please slice a model successfully before exporting.");
+            return;
+        }
+
+        const toastId = toast.loading("Generating job file...");
+
+        try {
+            const zip = new JSZip();
+
+            // 1. Add settings
+            const settings = {
+                slicingParams,
+                projectionParams,
+                alignmentParams,
+            };
+            zip.file("settings.json", JSON.stringify(settings, null, 2));
+
+            // 2. Add images
+            const projectionsFolder = zip.folder("projections");
+            if (!projectionsFolder) throw new Error("Could not create zip folder.");
+
+            for (let i = 0; i < projectionImages.length; i++) {
+                const base64Data = projectionImages[i].split(',')[1];
+                const fileName = `slice_${String(i).padStart(4, '0')}.png`;
+                projectionsFolder.file(fileName, base64Data, { base64: true });
+            }
+
+            // 3. Generate and download
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const zipFileName = (fileName || 'model').replace(/\.stl$/i, '') + '.zip';
+            saveAs(zipBlob, zipFileName);
+
+            toast.success("Job exported successfully!", { id: toastId });
+        } catch (error) {
+            console.error("Failed to export job:", error);
+            toast.error("Failed to export job.", { id: toastId });
+        }
+    }, [slicingStatus, projectionImages, slicingParams, projectionParams, alignmentParams, fileName]);
+
+    const handleImportJob = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const toastId = toast.loading("Importing job...");
+
+        try {
+            const zip = await JSZip.loadAsync(file);
+
+            // 1. Load settings
+            const settingsFile = zip.file("settings.json");
+            if (!settingsFile) throw new Error("settings.json not found in zip file.");
+            const settingsContent = await settingsFile.async("string");
+            const settings = JSON.parse(settingsContent);
+
+            setSlicingParams(settings.slicingParams);
+            setProjectionParams(settings.projectionParams);
+            setAlignmentParams(settings.alignmentParams);
+
+            // 2. Load images
+            const projectionsFolder = zip.folder("projections");
+            if (!projectionsFolder) throw new Error("projections folder not found.");
+
+            const imagePromises: Promise<{ name: string; data: string }>[] = [];
+            projectionsFolder.forEach((relativePath, zipEntry) => {
+                if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.png')) {
+                    const promise = zipEntry.async("base64").then(data => ({
+                        name: relativePath,
+                        data: `data:image/png;base64,${data}`
+                    }));
+                    imagePromises.push(promise);
+                }
+            });
+
+            const loadedImages = await Promise.all(imagePromises);
+            // Sort images by name to ensure correct order
+            loadedImages.sort((a, b) => a.name.localeCompare(b.name));
+            setProjectionImages(loadedImages.map(img => img.data));
+
+
+            // 3. Update UI
+            setFileName(file.name.replace(/\.zip$/i, '.stl'));
+            setStlFile(null); // We don't have the original STL, so clear it
+            setSlicingStatus('complete');
+            setSlicingStats({ count: loadedImages.length, time: 0 }); // Indicate loaded state
+            setActiveTab(Tab.Projecting);
+
+            toast.success("Job imported successfully!", { id: toastId });
+
+        } catch (error) {
+            console.error("Failed to import job:", error);
+            toast.error(`Import failed: ${(error as Error).message}`, { id: toastId });
+        } finally {
+            // Reset file input so the same file can be loaded again
+            event.target.value = '';
+        }
+    }, []);
+
 
 
   const TabButton: React.FC<{ tab: Tab }> = ({ tab }) => (
@@ -789,6 +1057,8 @@ function App() {
             slicingStatus={slicingStatus} slicingProgress={slicingProgress} slicingStats={slicingStats}
             slicingStatusMessage={slicingStatusMessage}
             fileName={fileName} setFileName={setFileName} setStlFile={setStlFile}
+            handleExportJob={handleExportJob}
+            handleImportJob={handleImportJob}
         />;
       case Tab.Projecting:
         return <ProjectingTab
@@ -800,6 +1070,8 @@ function App() {
             isTestPrinting={isTestPrinting}
             hasSlices={projectionImages.length > 0}
             isProjectionWindowConnected={projectionWindowStatus === 'Connected'}
+            isSimulationMode={isSimulationMode}
+            setIsSimulationMode={setIsSimulationMode}
         />;
       case Tab.Advanced:
         return <AdvancedTab
@@ -809,8 +1081,8 @@ function App() {
             projectionWindowStatus={projectionWindowStatus}
             handleCalibration={handleCalibration}
             isCalibrating={isCalibrating}
-            handleSaveOffset={handleSaveOffset}      
-            handleResetOffset={handleResetOffset}     
+            handleSaveOffset={handleSaveOffset}
+            handleResetOffset={handleResetOffset}
         />;
       default: return null;
     }
@@ -849,6 +1121,15 @@ function App() {
             <Route path="/projection" element={<ProjectionView />} />
             <Route path="/" element={
                  <div className="h-screen bg-gradient-to-br from-neutral-900 to-black text-white flex flex-col sm:flex-row items-stretch overflow-hidden">
+                    <Toaster
+                        position="bottom-center"
+                        toastOptions={{
+                            style: {
+                                background: '#333',
+                                color: '#fff',
+                            },
+                        }}
+                    />
                     <div className="w-full sm:w-1/2 md:w-5/12 lg:w-4/12 bg-neutral-900 shadow-2xl flex flex-col">
                         <header className="text-center py-6 border-b border-neutral-800 flex-shrink-0">
                             <h1 className="text-3xl font-bold tracking-wider">VAM Controller</h1>
