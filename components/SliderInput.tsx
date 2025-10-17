@@ -27,7 +27,7 @@ const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, 
             min={min}
             max={max}
             step={step}
-            className="w-20 bg-neutral-800 text-neutral-100 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-20 bg-neutral-800 text-neutral-100 rounded-md px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-red-400"
           />
           {unit && <span className="ml-2 text-neutral-400">{unit}</span>}
         </div>
@@ -39,7 +39,7 @@ const SliderInput: React.FC<SliderInputProps> = ({ label, value, onChange, min, 
         min={min}
         max={max}
         step={step}
-        className="w-full h-2 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+        className="w-full h-2 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-red-400"
       />
     </div>
   );
