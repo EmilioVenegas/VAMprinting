@@ -9,7 +9,7 @@ import STLViewer from './components/STLViewer';
 import SlicePreview from './components/SlicePreview';
 import { io, Socket } from 'socket.io-client';
 
-// --- ICONS (Added PlayIcon and CalibrationIcon) ---
+// --- ICONS  ---
 const UploadIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -44,7 +44,7 @@ const CalibrationIcon = () => (
 );
 
 
-// --- SlicingTab COMPONENT (No changes) ---
+// --- SlicingTab COMPONENT ---
 const SlicingTab: React.FC<{
     slicingParams: SlicingParams;
     setSlicingParams: React.Dispatch<React.SetStateAction<SlicingParams>>;
@@ -129,7 +129,7 @@ const SlicingTab: React.FC<{
     );
 };
 
-// --- ProjectingTab COMPONENT (No changes) ---
+// --- ProjectingTab COMPONENT ---
 const ProjectingTab: React.FC<{
     projectionParams: ProjectionParams;
     setProjectionParams: React.Dispatch<React.SetStateAction<ProjectionParams>>;
@@ -234,15 +234,17 @@ const ProjectingTab: React.FC<{
     );
 };
 
-// --- AdvancedTab COMPONENT (MODIFIED) ---
+// --- AdvancedTab COMPONENT ---
 const AdvancedTab: React.FC<{
     alignmentParams: AlignmentParams;
     setAlignmentParams: React.Dispatch<React.SetStateAction<AlignmentParams>>;
     openProjectionWindow: () => void;
     projectionWindowStatus: string;
-    handleCalibration: () => void; // <-- NEW
-    isCalibrating: boolean; // <-- NEW
-}> = ({ alignmentParams, setAlignmentParams, openProjectionWindow, projectionWindowStatus, handleCalibration, isCalibrating }) => {
+    handleCalibration: () => void;
+    isCalibrating: boolean;
+    handleSaveOffset: () => void;    // <-- NEW
+    handleResetOffset: () => void;   // <-- NEW
+}> = ({ alignmentParams, setAlignmentParams, openProjectionWindow, projectionWindowStatus, handleCalibration, isCalibrating, handleSaveOffset, handleResetOffset }) => {
     const isProjectionWindowConnected = projectionWindowStatus === 'Connected';
     const buttonText = (() => {
         switch (projectionWindowStatus) {
@@ -263,7 +265,6 @@ const AdvancedTab: React.FC<{
                 {buttonText}
             </button>
             <p className="text-sm text-neutral-500 h-5">{projectionWindowStatus === 'Connected' ? 'Projection active' : projectionWindowStatus}</p>
-            {/* --- NEW CALIBRATION BUTTON --- */}
             <button
                 onClick={handleCalibration}
                 disabled={!isProjectionWindowConnected}
@@ -274,6 +275,24 @@ const AdvancedTab: React.FC<{
                 <CalibrationIcon />
                 {isCalibrating ? 'Stop Calibration' : 'Calibrate'}
             </button>
+
+            {/* --- CONDITIONAL BUTTONS FOR CALIBRATION --- */}
+            {isCalibrating && (
+                <div className="w-full max-w-sm grid grid-cols-2 gap-4 mt-4">
+                    <button
+                        onClick={handleSaveOffset}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition"
+                    >
+                        Save Offset
+                    </button>
+                    <button
+                        onClick={handleResetOffset}
+                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition"
+                    >
+                        Reset Offset
+                    </button>
+                </div>
+            )}
 
             <div className="w-full max-w-sm space-y-4 pt-4">
                 <SliderInput label="Image Scale" min={50} max={200} value={alignmentParams.scale} onChange={val => setAlignmentParams(p => ({ ...p, scale: val }))} unit="%" />
@@ -286,12 +305,12 @@ const AdvancedTab: React.FC<{
 };
 
 
-// --- ProjectionView (MODIFIED) ---
+// --- ProjectionView  ---
 const ProjectionView: React.FC = () => {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [transform, setTransform] = useState('scale(1) translateX(0px) translateY(0px)');
     const [filter, setFilter] = useState('contrast(100%)');
-    const [showCalibration, setShowCalibration] = useState(false); // <-- NEW
+    const [showCalibration, setShowCalibration] = useState(false);
 
     useEffect(() => {
         const setupConnection = (connection: PresentationConnection) => {
@@ -299,12 +318,12 @@ const ProjectionView: React.FC = () => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'UPDATE_IMAGE') {
-                        setShowCalibration(false); // Turn off calibration if an image is sent
+                        setShowCalibration(false);
                         setImageUrl(data.imageUrl);
                     } else if (data.type === 'CLEAR_IMAGE') {
                         setShowCalibration(false);
                         setImageUrl(null);
-                    } else if (data.type === 'TOGGLE_CALIBRATION') { // <-- NEW
+                    } else if (data.type === 'TOGGLE_CALIBRATION') {
                         setShowCalibration(data.show);
                     } else if (data.type === 'UPDATE_ALIGNMENT') {
                         const { scale, translateX, translateY, contrast } = data.params;
@@ -325,7 +344,7 @@ const ProjectionView: React.FC = () => {
         if (navigator.presentation?.receiver) {
             navigator.presentation.receiver.connectionList.then(list => {
                 list.connections.forEach(setupConnection);
-                list.onconnectionavailable = (event: any) => { // PresentationConnectionAvailableEvent
+                list.onconnectionavailable = (event: any) => {
                     setupConnection(event.connection);
                 };
             });
@@ -335,18 +354,14 @@ const ProjectionView: React.FC = () => {
 
     return (
         <div className="bg-black w-screen h-screen flex items-center justify-center overflow-hidden relative">
-            {/* --- NEW CALIBRATION 'T' --- */}
             {showCalibration && (
                 <div className="absolute inset-0 flex items-center justify-center" style={{ transform }}>
                     <div className="relative" style={{ width: '80vmin', height: '80vmin' }}>
-                        {/* Vertical Bar */}
                         <div className="absolute top-0 left-1/2 bg-white w-1 h-full -translate-x-1/2"></div>
-                        {/* Horizontal Bar (top of the inverted T) */}
                         <div className="absolute top-0 left-0 bg-white h-1 w-full"></div>
                     </div>
                 </div>
             )}
-            {/* --- Existing Image View --- */}
             {!showCalibration && imageUrl ? (
                 <img src={imageUrl} alt="Projection" className="max-w-full max-h-full" style={{ transform, filter }} />
             ) : !showCalibration && (
@@ -357,7 +372,7 @@ const ProjectionView: React.FC = () => {
 };
 
 
-// --- MAIN APP COMPONENT (MODIFIED) ---
+// --- MAIN APP COMPONENT ---
 
 // BLE constants
 const SERVICE_UUID = "1e8d1feb-8ee1-49c7-88f2-d2e8d5fc210d";
@@ -394,7 +409,7 @@ function App() {
   const [hopsPerTrigger, setHopsPerTrigger] = useState(10);
   const [hopDelay, setHopDelay] = useState(0.5); // seconds
   const [isTestPrinting, setIsTestPrinting] = useState(false);
-  const [isCalibrating, setIsCalibrating] = useState(false); // <-- NEW
+  const [isCalibrating, setIsCalibrating] = useState(false);
 
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
@@ -406,6 +421,30 @@ function App() {
 
   const printProcessRef = useRef<{ currentFrame: number; intervalId: number | null }>({ currentFrame: 0, intervalId: null });
   const testPrintIntervalRef = useRef<number | null>(null);
+
+  
+  const CALIBRATION_OFFSET_KEY = 'vam-calibration-offset';
+
+  
+  useEffect(() => {
+    try {
+        const savedOffsetJSON = localStorage.getItem(CALIBRATION_OFFSET_KEY);
+        if (savedOffsetJSON) {
+            const savedOffset = JSON.parse(savedOffsetJSON);
+            if (typeof savedOffset.x === 'number' && typeof savedOffset.y === 'number') {
+                setAlignmentParams(prevParams => ({
+                    ...prevParams,
+                    translateX: savedOffset.x,
+                    translateY: savedOffset.y,
+                }));
+                console.log('Loaded calibration offset:', savedOffset);
+            }
+        }
+    } catch (error) {
+        console.error("Failed to load or parse calibration offset from localStorage:", error);
+    }
+  }, []); 
+
 
   useEffect(() => {
     return () => {
@@ -529,10 +568,8 @@ function App() {
       alert("Please connect to the second monitor from the 'Advanced' tab first.");
       return;
     }
-    // --- NEW: Stop calibration when starting test print
     if (isCalibrating) {
         setIsCalibrating(false);
-        // Message is sent implicitly by the 'UPDATE_IMAGE' command below
     }
 
     setIsTestPrinting(true);
@@ -551,13 +588,11 @@ function App() {
   }, [isTestPrinting, projectionImages, timePerFrame, printMode, stopTestPrint, isCalibrating]);
 
 
-  // --- NEW CALIBRATION HANDLER ---
   const handleCalibration = useCallback(() => {
     if (presentationConnectionRef.current?.state !== 'connected') {
         alert("Please connect to the second monitor first.");
         return;
     }
-    // Stop test printing if it's running
     if (isTestPrinting) {
         stopTestPrint();
     }
@@ -567,6 +602,35 @@ function App() {
     presentationConnectionRef.current.send(JSON.stringify({ type: 'TOGGLE_CALIBRATION', show: newCalibrationState }));
 
   }, [isCalibrating, isTestPrinting, stopTestPrint]);
+
+  
+  const handleSaveOffset = useCallback(() => {
+    try {
+        const offset = {
+            x: alignmentParams.translateX,
+            y: alignmentParams.translateY,
+        };
+        localStorage.setItem(CALIBRATION_OFFSET_KEY, JSON.stringify(offset));
+        alert(`Offset saved:\nX: ${offset.x}px\nY: ${offset.y}px`);
+    } catch (error) {
+        console.error("Failed to save calibration offset to localStorage:", error);
+        alert("Error: Could not save the offset. Your browser might be in private mode or has storage disabled.");
+    }
+  }, [alignmentParams.translateX, alignmentParams.translateY]);
+
+  const handleResetOffset = useCallback(() => {
+    try {
+        localStorage.removeItem(CALIBRATION_OFFSET_KEY);
+        setAlignmentParams(prevParams => ({
+            ...prevParams,
+            translateX: 0,
+            translateY: 0,
+        }));
+        alert("Calibration offset has been reset to zero.");
+    } catch (error) {
+        console.error("Failed to remove calibration offset from localStorage:", error);
+    }
+  }, []); 
 
 
   const stopPrint = useCallback(() => {
@@ -639,7 +703,7 @@ function App() {
             }
             stopPrint();
             stopTestPrint();
-            setIsCalibrating(false); // <-- NEW: Reset calibration state
+            setIsCalibrating(false);
         };
         connection.onclose = closeHandler;
         connection.onterminate = closeHandler;
@@ -739,10 +803,14 @@ function App() {
         />;
       case Tab.Advanced:
         return <AdvancedTab
-            alignmentParams={alignmentParams} setAlignmentParams={setAlignmentParams}
-            openProjectionWindow={openProjectionWindow} projectionWindowStatus={projectionWindowStatus}
-            handleCalibration={handleCalibration} // <-- NEW
-            isCalibrating={isCalibrating} // <-- NEW
+            alignmentParams={alignmentParams}
+            setAlignmentParams={setAlignmentParams}
+            openProjectionWindow={openProjectionWindow}
+            projectionWindowStatus={projectionWindowStatus}
+            handleCalibration={handleCalibration}
+            isCalibrating={isCalibrating}
+            handleSaveOffset={handleSaveOffset}      
+            handleResetOffset={handleResetOffset}     
         />;
       default: return null;
     }
