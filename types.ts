@@ -4,6 +4,7 @@ export enum Tab {
   Slicing = 'Slicing',
   Projecting = 'Projecting',
   Advanced = 'Advanced',
+  Hardware = 'Hardware',
 }
 
 export type PrintMode = 'velocity' | 'hops' | 'time-per-frame';
@@ -37,6 +38,14 @@ export interface AlignmentParams {
   translateX: number;
   translateY: number;
   contrast: number;
+}
+export interface LedSettings {
+  uv: boolean;
+  green: boolean;
+  blue: boolean;
+  uvCurrent: number;
+  greenCurrent: number;
+  blueCurrent: number;
 }
 
 // Fix: Centralized Web Bluetooth API type definitions to resolve declaration conflicts.

@@ -15,13 +15,18 @@ from PIL import Image
 from scipy.ndimage import rotate
 from joblib import Parallel, delayed
 
+# --- VAM Hardware Import ---
+from dlp import dlpc350
+
 # --- Initialize Flask App and Logger ---
 app = Flask(__name__)
 deployed_frontend_url = os.environ.get("FRONTEND_URL")
 
 # Define a list of allowed origins
 allowed_origins = [
-    "http://localhost:3000",  # For local development
+    "http://localhost:3000",
+    "http://100.102.169.19:3000",
+        # For local development
 ]
 
 # Add the deployed URL to the list if it exists
@@ -36,6 +41,26 @@ logger = logging.getLogger(__name__)
 # --- In-memory store for job progress ---
 progress_store = {}
 progress_lock = threading.Lock()
+
+# --- Singleton for Projector Hardware ---
+projector = None
+projector_lock = threading.Lock()
+# Store current settings to re-apply when toggling light
+current_led_settings = {
+    "uv": True,
+    "green": False,
+    "blue": False,
+    "uvCurrent": 45,
+    "greenCurrent": 0,
+    "blueCurrent": 0
+}
+
+def get_projector():
+    global projector
+    with projector_lock:
+        if projector is None:
+            projector = dlpc350()
+        return projector
 
 # --- Constants for progress stages  ---
 PROGRESS_MESH_LOADING = 5
@@ -97,7 +122,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
         # Pad the voxel grid to prevent cropping during rotation
         max_dim = max(voxel_grid.shape)
         # Calculate padding needed for a 45-degree rotation without cropping
-        pad_width = int(np.ceil((np.sqrt(2) * max_dim - max_dim) / 2))
+        pad_width = 1
         padded_grid = np.pad(voxel_grid, pad_width, mode='constant', constant_values=0)
         
         # Angles for projection
@@ -213,6 +238,102 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             progress_store[job_id] = {'progress': 100, 'stage': 'FAILED', 'status': 'failed', 'error': str(e)}
 
 # --- API Endpoints ---
+
+# --- New Projector Hardware Endpoints ---
+@app.route('/api/projector/connect', methods=['POST'])
+def connect_projector():
+    proj = get_projector()
+    if proj.connected:
+        return jsonify({"status": "Already connected"}), 200
+    try:
+        proj.Connect()
+        if proj.connected:
+            return jsonify({"status": "Connection successful"}), 200
+        else:
+            return jsonify({"error": "Failed to connect. Is the device plugged in?"}), 500
+    except Exception as e:
+        logger.error(f"Error connecting to projector: {e}", exc_info=True)
+        # Reset the singleton if connection fails badly
+        global projector
+        projector = None
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/projector/disconnect', methods=['POST'])
+def disconnect_projector():
+    global projector
+    proj = get_projector()
+    if proj.connected:
+        try:
+            proj.disable_LEDs()
+        except Exception as e:
+            logger.error(f"Could not disable LEDs on disconnect: {e}")
+    projector = None # Destroy the instance
+    logger.info("Projector instance destroyed.")
+    return jsonify({"status": "Disconnected"}), 200
+
+
+@app.route('/api/projector/status', methods=['GET'])
+def projector_status():
+    proj = get_projector()
+    return jsonify({
+        "connected": proj.connected,
+        "settings": current_led_settings
+    }), 200
+
+@app.route('/api/projector/settings', methods=['POST'])
+def projector_settings():
+    global current_led_settings
+    proj = get_projector()
+    if not proj.connected:
+        return jsonify({"error": "Projector not connected"}), 400
+    
+    data = request.get_json()
+    current_led_settings = data # Update global settings
+    
+    try:
+        # Note: Your dlp.py uses (red, green, blue) but your printing.py implies red is UV.
+        # I am mapping based on printing.py: red=UV, green=green, blue=blue
+        proj.set_current_RGB(
+            red=data['uvCurrent'], 
+            green=data['greenCurrent'], 
+            blue=data['blueCurrent']
+        )
+        logger.info(f"Set projector currents to: UV={data['uvCurrent']}, G={data['greenCurrent']}, B={data['blueCurrent']}")
+        return jsonify({"status": "Settings updated"}), 200
+    except Exception as e:
+        logger.error(f"Error setting projector currents: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/projector/light', methods=['POST'])
+def projector_light_toggle():
+    proj = get_projector()
+    if not proj.connected:
+        return jsonify({"error": "Projector not connected"}), 400
+        
+    data = request.get_json()
+    state = data.get('state') # "on" or "off"
+
+    try:
+        if state == 'on':
+            settings = current_led_settings
+            proj.enable_LEDs(
+                red=settings['uv'], 
+                green=settings['green'], 
+                blue=settings['blue']
+            )
+            logger.info(f"Enabled LEDs with settings: UV={settings['uv']}, G={settings['green']}, B={settings['blue']}")
+        elif state == 'off':
+            proj.disable_LEDs()
+            logger.info("Disabled LEDs.")
+        else:
+            return jsonify({"error": "Invalid state"}), 400
+        
+        return jsonify({"status": f"Light turned {state}"}), 200
+    except Exception as e:
+        logger.error(f"Error toggling projector light: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/remesh', methods=['POST'])
 def remesh_model():
     logger.info("--- REMESH JOB RECEIVED ---")

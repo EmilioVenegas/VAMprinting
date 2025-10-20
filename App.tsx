@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { Tab, SlicingParams, ProjectionParams, AlignmentParams, PrintMode, PresentationConnection, SlicingStatus, SlicingStats, SlicingProgressDetails } from './types';
+import { Tab, SlicingParams, ProjectionParams, AlignmentParams, PrintMode, PresentationConnection, SlicingStatus, SlicingStats, SlicingProgressDetails, LedSettings } from './types';
 import type { BluetoothRemoteGATTCharacteristic } from './types';
 import SliderInput from './components/SliderInput';
 import STLViewer from './components/STLViewer';
@@ -53,6 +53,85 @@ const RemeshIcon = () => (
         <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
     </svg>
 );
+
+// --- NEW HardwareTab COMPONENT ---
+const HardwareTab: React.FC<{
+    projectorStatus: 'Connected' | 'Disconnected' | 'Connecting...';
+    ledSettings: LedSettings;
+    setLedSettings: (settings: LedSettings) => void;
+    isLightOn: boolean;
+    connectProjector: () => void;
+    disconnectProjector: () => void;
+    toggleLight: () => void;
+}> = ({ projectorStatus, ledSettings, setLedSettings, isLightOn, connectProjector, disconnectProjector, toggleLight }) => {
+    
+    const isConnected = projectorStatus === 'Connected';
+
+    const handleCheckboxChange = (led: 'uv' | 'green' | 'blue') => {
+        setLedSettings({ ...ledSettings, [led]: !ledSettings[led] });
+    };
+
+    const handleSliderChange = (led: 'uvCurrent' | 'greenCurrent' | 'blueCurrent', value: number) => {
+        setLedSettings({ ...ledSettings, [led]: value });
+    };
+
+    return (
+        <div className="space-y-6 flex flex-col items-center p-6">
+            <div className="w-full max-w-sm">
+                <button
+                    onClick={isConnected ? disconnectProjector : connectProjector}
+                    disabled={projectorStatus === 'Connecting...'}
+                    className={`w-full font-bold py-2 px-4 rounded-md transition flex items-center justify-center
+                        ${isConnected ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
+                        disabled:bg-neutral-500/50 disabled:cursor-wait`}
+                >
+                    {projectorStatus === 'Connecting...' && <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>}
+                    {isConnected ? 'Disconnect Projector' : 'Connect Projector'}
+                </button>
+                <p className="text-center text-sm text-neutral-500 mt-1 h-5">
+                    Status: {projectorStatus}
+                </p>
+            </div>
+
+            {isConnected && (
+                <>
+                    <div className="w-full max-w-sm space-y-4 bg-neutral-800/50 p-4 rounded-lg">
+                        <div>
+                            <label className="block text-sm font-medium text-neutral-300 mb-2">LED Selection</label>
+                            <div className="space-y-2">
+                                {([['uv', 'UV (Red)'], ['green', 'Green'], ['blue', 'Blue']] as const).map(([key, label]) => (
+                                     <div key={key} className="flex items-center justify-between">
+                                        <label htmlFor={key} className="text-neutral-200">{label}</label>
+                                        <input
+                                            id={key}
+                                            type="checkbox"
+                                            checked={ledSettings[key]}
+                                            onChange={() => handleCheckboxChange(key)}
+                                            className="form-checkbox h-5 w-5 text-red-400 bg-neutral-700 border-neutral-600 rounded focus:ring-red-400"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-3 pt-2">
+                             <SliderInput label="UV Intensity" min={0} max={255} step={1} value={ledSettings.uvCurrent} onChange={val => handleSliderChange('uvCurrent', val)} />
+                             <SliderInput label="Green Intensity" min={0} max={255} step={1} value={ledSettings.greenCurrent} onChange={val => handleSliderChange('greenCurrent', val)} />
+                             <SliderInput label="Blue Intensity" min={0} max={255} step={1} value={ledSettings.blueCurrent} onChange={val => handleSliderChange('blueCurrent', val)} />
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={toggleLight}
+                        className={`w-full max-w-sm font-bold py-3 px-4 rounded-md transition text-xl
+                            ${isLightOn ? 'bg-yellow-500 hover:bg-yellow-600 text-black' : 'bg-neutral-700 hover:bg-neutral-600'}`}
+                    >
+                        {isLightOn ? 'LIGHT ON' : 'LIGHT OFF'}
+                    </button>
+                </>
+            )}
+        </div>
+    );
+};
 
 
 // --- SlicingTab COMPONENT ---
@@ -162,7 +241,8 @@ const SlicingTab: React.FC<{
 
             toast.success("Mesh simplified successfully!", { id: toastId });
 
-        } catch (error) {
+        } catch (error)
+        {
             console.error("Remeshing failed:", error);
             const errorMessage = (error as Error).message;
             toast.error(`Remeshing failed: ${errorMessage}`, { id: toastId });
@@ -217,7 +297,7 @@ const SlicingTab: React.FC<{
                     <button
                         onClick={handleRemesh}
                         disabled={!fileName || isRemeshing || isSlicing}
-                        className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 disabled:cursor-not-allowed text-white font-bold py-1 px-3 rounded-md transition flex items-center justify-center"
+                        className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md transition flex items-center justify-center"
                     >
                         {isRemeshing ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div> : <RemeshIcon />}
                         {isRemeshing ? 'Simplifying...' : 'Simplify Mesh'}
@@ -570,6 +650,14 @@ function App() {
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
   const [writeCharacteristic, setWriteCharacteristic] = useState<BluetoothRemoteGATTCharacteristic | null>(null);
+  
+  // --- New Projector Hardware State ---
+  const [projectorStatus, setProjectorStatus] = useState<'Connected' | 'Disconnected' | 'Connecting...'>('Disconnected');
+  const [ledSettings, setLedSettings] = useState<LedSettings>({
+      uv: true, green: false, blue: false, uvCurrent: 45, greenCurrent: 0, blueCurrent: 0
+  });
+  const [isLightOn, setIsLightOn] = useState(false);
+
 
   // Window Management State
   const presentationConnectionRef = useRef<PresentationConnection | null>(null);
@@ -643,6 +731,97 @@ function App() {
       }
     };
   }, []);
+  
+  // --- New Projector Hardware Handlers ---
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+  const checkProjectorStatus = useCallback(async () => {
+      try {
+          const response = await fetch(`${API_BASE_URL}/api/projector/status`);
+          const data = await response.json();
+          setProjectorStatus(data.connected ? 'Connected' : 'Disconnected');
+          if (data.connected) {
+              setLedSettings(data.settings);
+          }
+      } catch (error) {
+          console.error("Failed to check projector status:", error);
+          setProjectorStatus('Disconnected');
+      }
+  }, [API_BASE_URL]);
+
+  useEffect(() => {
+      const interval = setInterval(checkProjectorStatus, 5000); // Check status every 5 seconds
+      return () => clearInterval(interval);
+  }, [checkProjectorStatus]);
+
+  const handleConnectProjector = useCallback(async () => {
+      setProjectorStatus('Connecting...');
+      try {
+          const response = await fetch(`${API_BASE_URL}/api/projector/connect`, { method: 'POST' });
+          if (!response.ok) {
+              const err = await response.json();
+              throw new Error(err.error || 'Connection failed');
+          }
+          await checkProjectorStatus();
+          toast.success("Projector connected!");
+      } catch (error) {
+          toast.error(`Connection failed: ${(error as Error).message}`);
+          setProjectorStatus('Disconnected');
+      }
+  }, [API_BASE_URL, checkProjectorStatus]);
+  
+  const handleDisconnectProjector = useCallback(async () => {
+      try {
+          await fetch(`${API_BASE_URL}/api/projector/disconnect`, { method: 'POST' });
+          setProjectorStatus('Disconnected');
+          setIsLightOn(false);
+          toast.success("Projector disconnected.");
+      } catch (error) {
+          toast.error("Failed to disconnect.");
+      }
+  }, [API_BASE_URL]);
+
+  const handleUpdateLedSettings = useCallback(async (settings: LedSettings) => {
+      setLedSettings(settings);
+      if (projectorStatus !== 'Connected') return;
+      try {
+          const response = await fetch(`${API_BASE_URL}/api/projector/settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(settings)
+          });
+          if (!response.ok) throw new Error("Failed to update settings");
+          
+          // If light is on, re-enable LEDs to apply checkbox changes immediately
+          if (isLightOn) {
+              await fetch(`${API_BASE_URL}/api/projector/light`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ state: 'on' })
+              });
+          }
+
+      } catch (error) {
+          console.error("Failed to update LED settings:", error);
+          toast.error("Could not update settings.");
+      }
+  }, [API_BASE_URL, projectorStatus, isLightOn]);
+
+  const handleToggleLight = useCallback(async () => {
+      const newState = !isLightOn;
+      try {
+          const response = await fetch(`${API_BASE_URL}/api/projector/light`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ state: newState ? 'on' : 'off' })
+          });
+          if (!response.ok) throw new Error("Failed to toggle light");
+          setIsLightOn(newState);
+      } catch (error) {
+          toast.error("Failed to toggle light.");
+      }
+  }, [API_BASE_URL, isLightOn]);
+
 
   const handleSlice = useCallback(async () => {
     if (!stlFile) {
@@ -671,7 +850,6 @@ function App() {
     formData.append('rot_z', slicingParams.rotZ.toString());
 
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL;
         const startResponse = await fetch(`${API_BASE_URL}/api/slice/start`, {
             method: 'POST',
             body: formData,
@@ -739,7 +917,7 @@ function App() {
         setSlicingProgressDetails(null);
         toast.error(`Slicing failed: ${errorMessage}`);
     }
-  }, [stlFile, slicingParams]);
+  }, [stlFile, slicingParams, API_BASE_URL]);
 
 
   const stopTestPrint = useCallback(() => {
@@ -1165,7 +1343,7 @@ const handleExportJob = useCallback(async () => {
   const TabButton: React.FC<{ tab: Tab }> = ({ tab }) => (
     <button
       onClick={() => setActiveTab(tab)}
-      className={`px-6 py-3 text-lg font-semibold transition border-b-4
+      className={`px-4 py-3 text-lg font-semibold transition border-b-4
         ${activeTab === tab
           ? 'text-neutral-100 border-red-400'
           : 'text-neutral-400 border-transparent hover:text-neutral-200 hover:border-neutral-700'}`}
@@ -1196,6 +1374,16 @@ const handleExportJob = useCallback(async () => {
             isTestPrinting={isTestPrinting}
             hasSlices={projectionImages.length > 0}
             isProjectionWindowConnected={projectionWindowStatus === 'Connected'}
+        />;
+       case Tab.Hardware:
+        return <HardwareTab
+            projectorStatus={projectorStatus}
+            ledSettings={ledSettings}
+            setLedSettings={handleUpdateLedSettings}
+            isLightOn={isLightOn}
+            connectProjector={handleConnectProjector}
+            disconnectProjector={handleDisconnectProjector}
+            toggleLight={handleToggleLight}
         />;
       case Tab.Advanced:
         return <AdvancedTab
@@ -1258,9 +1446,10 @@ const handleExportJob = useCallback(async () => {
                         <header className="text-center py-6 border-b border-neutral-800 flex-shrink-0">
                             <h1 className="text-3xl font-bold tracking-wider">VAM Controller</h1>
                         </header>
-                        <nav className="flex justify-center bg-neutral-900 border-b border-neutral-800 flex-shrink-0">
+                        <nav className="flex justify-around bg-neutral-900 border-b border-neutral-800 flex-shrink-0">
                             <TabButton tab={Tab.Slicing} />
                             <TabButton tab={Tab.Projecting} />
+                            <TabButton tab={Tab.Hardware} />
                             <TabButton tab={Tab.Advanced} />
                         </nav>
                         <main className="flex-grow overflow-y-auto">

@@ -8,4 +8,5 @@ joblib
 gunicorn
 Pillow
 open3d
-python app.py
+pyusb
+pycrafter4500
