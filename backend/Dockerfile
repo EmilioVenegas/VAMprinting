@@ -15,6 +15,4 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 5000
 
-# Run the app. Gunicorn is a production-ready WSGI server.
-# We use 4 workers and set a long timeout (30 minutes) for potentially long slicing jobs.
-CMD ["gunicorn", "--workers", "4", "-k", "gevent", "--timeout", "1800", "--bind", "0.0.0.0:5000", "app:app"]
+CMD ["gunicorn", "--workers", "2", "--threads", "4", "-k", "gthread", "--timeout", "1800", "--bind", "0.0.0.0:5000", "app:app"]

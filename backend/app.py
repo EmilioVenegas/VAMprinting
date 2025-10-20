@@ -213,6 +213,48 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             progress_store[job_id] = {'progress': 100, 'stage': 'FAILED', 'status': 'failed', 'error': str(e)}
 
 # --- API Endpoints ---
+@app.route('/api/remesh', methods=['POST'])
+def remesh_model():
+    logger.info("--- REMESH JOB RECEIVED ---")
+    if 'stl_file' not in request.files:
+        return jsonify({"error": "No stl_file part"}), 400
+    
+    stl_file = request.files['stl_file']
+    if stl_file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        simplification_percentage_str = request.form.get('simplification_percentage', '80')
+        simplification_percentage = float(simplification_percentage_str)
+        
+        in_memory_file = io.BytesIO(stl_file.read())
+        mesh = trimesh.load(in_memory_file, file_type='stl')
+
+        original_face_count = len(mesh.faces)
+        logger.info(f"Original mesh has {original_face_count} faces.")
+
+        if simplification_percentage >= 100:
+            logger.info("Simplification percentage is 100% or more, returning original mesh.")
+            stl_file.seek(0)
+            return Response(stl_file.read(), mimetype='application/octet-stream')
+
+        target_face_count = int(original_face_count * (simplification_percentage / 100.0))
+        
+        simplified_mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        
+        logger.info(f"Simplified mesh to {len(simplified_mesh.faces)} faces (target: {target_face_count}).")
+
+        export_file = io.BytesIO()
+        simplified_mesh.export(export_file, file_type='stl')
+        export_file.seek(0)
+        
+        return Response(export_file.read(), mimetype='application/octet-stream')
+
+    except Exception as e:
+        logger.error(f"Error during remeshing: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/slice/start', methods=['POST'])
 def slice_model_start():
     logger.info("--- SLICING JOB RECEIVED ---")

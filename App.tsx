@@ -47,6 +47,13 @@ const CalibrationIcon = () => (
     </svg>
 );
 
+const RemeshIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+    </svg>
+);
+
 
 // --- SlicingTab COMPONENT ---
 const SlicingTab: React.FC<{
@@ -60,12 +67,15 @@ const SlicingTab: React.FC<{
     slicingProgressDetails: SlicingProgressDetails | null;
     fileName: string | null;
     setFileName: (name: string | null) => void;
+    stlFile: File | null;
     setStlFile: (file: File | null) => void;
     handleExportJob: () => void;
     handleImportJob: (event: React.ChangeEvent<HTMLInputElement>) => void;
-}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, slicingProgressDetails, fileName, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
+}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, slicingProgressDetails, fileName, stlFile, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
 
     const [isDragging, setIsDragging] = useState(false);
+    const [simplificationPercentage, setSimplificationPercentage] = useState(80);
+    const [isRemeshing, setIsRemeshing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +129,48 @@ const SlicingTab: React.FC<{
         }
     };
 
+    const handleRemesh = async () => {
+        if (!stlFile) {
+            toast.error("Please upload an STL file first.");
+            return;
+        }
+
+        setIsRemeshing(true);
+        const toastId = toast.loading("Simplifying mesh...");
+
+        const formData = new FormData();
+        formData.append('stl_file', stlFile);
+        formData.append('simplification_percentage', simplificationPercentage.toString());
+
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL;
+            const response = await fetch(`${API_BASE_URL}/api/remesh`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Failed to remesh: ${errorText}`);
+            }
+
+            const blob = await response.blob();
+            const newFile = new File([blob], `simplified_${fileName}`, { type: 'model/stl' });
+            
+            setStlFile(newFile);
+            setFileName(newFile.name);
+
+            toast.success("Mesh simplified successfully!", { id: toastId });
+
+        } catch (error) {
+            console.error("Remeshing failed:", error);
+            const errorMessage = (error as Error).message;
+            toast.error(`Remeshing failed: ${errorMessage}`, { id: toastId });
+        } finally {
+            setIsRemeshing(false);
+        }
+    };
+
 
     const isSlicing = slicingStatus === 'slicing';
 
@@ -150,6 +202,28 @@ const SlicingTab: React.FC<{
             </div>
 
             <div className="w-full max-w-sm space-y-4">
+                {/* Remesh Section */}
+                <div className="bg-neutral-800/50 p-3 rounded-lg">
+                    <h3 className="text-sm font-medium text-neutral-300 mb-2">Mesh Simplification</h3>
+                    <SliderInput
+                        label="Quality"
+                        min={10}
+                        max={100}
+                        step={5}
+                        value={simplificationPercentage}
+                        onChange={setSimplificationPercentage}
+                        unit="%"
+                    />
+                    <button
+                        onClick={handleRemesh}
+                        disabled={!fileName || isRemeshing || isSlicing}
+                        className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 disabled:cursor-not-allowed text-white font-bold py-1 px-3 rounded-md transition flex items-center justify-center"
+                    >
+                        {isRemeshing ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div> : <RemeshIcon />}
+                        {isRemeshing ? 'Simplifying...' : 'Simplify Mesh'}
+                    </button>
+                </div>
+
                 <SliderInput label="Voxel Size" min={0.05} max={2.0} step={0.1} value={slicingParams.voxelSize} onChange={val => setSlicingParams(p => ({ ...p, voxelSize: val }))} />
                 <SliderInput label="Number of Projections" min={30} max={360} step={30} value={slicingParams.numProjections} onChange={val => setSlicingParams(p => ({ ...p, numProjections: val }))} />
                 <div>
@@ -1108,7 +1182,7 @@ const handleExportJob = useCallback(async () => {
             slicingStatus={slicingStatus} slicingProgress={slicingProgress} slicingStats={slicingStats}
             slicingStatusMessage={slicingStatusMessage}
             slicingProgressDetails={slicingProgressDetails}
-            fileName={fileName} setFileName={setFileName} setStlFile={setStlFile}
+            fileName={fileName} setFileName={setFileName} stlFile={stlFile} setStlFile={setStlFile}
             handleExportJob={handleExportJob}
             handleImportJob={handleImportJob}
         />;
