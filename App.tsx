@@ -597,7 +597,8 @@ function App() {
     formData.append('rot_z', slicingParams.rotZ.toString());
 
     try {
-        const startResponse = await fetch('http://127.0.0.1:5000/api/slice/start', {
+        const API_BASE_URL = process.env.REACT_APP_API_URL;
+        const startResponse = await fetch('${API_BASE_URL}/api/slice/start', {
             method: 'POST',
             body: formData,
         });
@@ -611,7 +612,7 @@ function App() {
         if (!job_id) throw new Error("Did not receive a job_id from the server.");
 
         setSlicingProgressDetails({ stage: 'CONNECTING', status: 'Connecting to progress stream...' });
-        const eventSource = new EventSource(`http://127.0.0.1:5000/api/slice/progress/${job_id}`);
+        const eventSource = new EventSource(`${API_BASE_URL}/api/slice/progress/${job_id}`);
         eventSourceRef.current = eventSource;
 
         eventSource.onmessage = (event) => {
