@@ -597,8 +597,8 @@ function App() {
     formData.append('rot_z', slicingParams.rotZ.toString());
 
     try {
-        const API_BASE_URL = process.env.REACT_APP_API_URL;
-        const startResponse = await fetch('${API_BASE_URL}/api/slice/start', {
+        const API_BASE_URL = import.meta.env.VITE_API_URL;
+        const startResponse = await fetch(`${API_BASE_URL}/api/slice/start`, {
             method: 'POST',
             body: formData,
         });

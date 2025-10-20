@@ -17,7 +17,18 @@ from joblib import Parallel, delayed
 
 # --- Initialize Flask App and Logger ---
 app = Flask(__name__)
-CORS(app)
+deployed_frontend_url = os.environ.get("FRONTEND_URL")
+
+# Define a list of allowed origins
+allowed_origins = [
+    "http://localhost:3000",  # For local development
+]
+
+# Add the deployed URL to the list if it exists
+if deployed_frontend_url:
+    allowed_origins.append(deployed_frontend_url)
+
+CORS(app, origins=allowed_origins, supports_credentials=True)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -204,6 +215,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
 # --- API Endpoints ---
 @app.route('/api/slice/start', methods=['POST'])
 def slice_model_start():
+    logger.info("--- SLICING JOB RECEIVED ---")
     if 'stl_file' not in request.files:
         return jsonify({"error": "No stl_file part"}), 400
     
@@ -289,6 +301,11 @@ def slice_model_progress(job_id):
             time.sleep(0.5) # Increased sleep to reduce CPU usage for polling
 
     return Response(generate(), mimetype='text/event-stream')
+@app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint for the ALB."""
+    logger.info("Health check endpoint was hit.")
+    return jsonify({"status": "healthy"}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
