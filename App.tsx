@@ -13,13 +13,12 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 
-// --- ICONS  ---
+// --- ICONS (No changes here) ---
 const UploadIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
     </svg>
 );
-
 const PrintIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
     <path
@@ -34,19 +33,16 @@ const StopIcon = () => (
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
     </svg>
 );
-
 const PlayIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clipRule="evenodd" />
     </svg>
 );
-
 const CalibrationIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
     </svg>
 );
-
 const RemeshIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
@@ -54,7 +50,7 @@ const RemeshIcon = () => (
     </svg>
 );
 
-// --- NEW HardwareTab COMPONENT ---
+// --- HardwareTab COMPONENT ---
 const HardwareTab: React.FC<{
     projectorStatus: 'Connected' | 'Disconnected' | 'Connecting...';
     ledSettings: LedSettings;
@@ -143,7 +139,7 @@ type RealWorldProjectionSize = {
 } | null;
 
 
-// --- SlicingTab COMPONENT ---
+// --- SlicingTab COMPONENT (No changes here) ---
 const SlicingTab: React.FC<{
     slicingParams: SlicingParams;
     setSlicingParams: React.Dispatch<React.SetStateAction<SlicingParams>>;
@@ -384,7 +380,7 @@ const SlicingTab: React.FC<{
     );
 };
 
-// --- ProjectingTab COMPONENT ---
+// --- ProjectingTab COMPONENT (No changes here) ---
 const ProjectingTab: React.FC<{
     projectionParams: ProjectionParams;
     setProjectionParams: React.Dispatch<React.SetStateAction<ProjectionParams>>;
@@ -491,7 +487,7 @@ const ProjectingTab: React.FC<{
     );
 };
 
-// --- AdvancedTab COMPONENT ---
+// --- AdvancedTab COMPONENT (No changes here) ---
 const getImageDimensions = (dataUri: string): Promise<{ width: number, height: number }> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -573,7 +569,7 @@ const AdvancedTab: React.FC<{
 };
 
 
-// --- ProjectionView  ---
+// --- ProjectionView (No changes here) ---
 const ProjectionView: React.FC = () => {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [transform, setTransform] = useState('scale(1) translateX(0px) translateY(0px)');
@@ -789,7 +785,7 @@ function App() {
     };
   }, []);
   
-  // --- New Projector Hardware Handlers ---
+  // --- New Projector Hardware Handlers (No changes here) ---
   const API_BASE_URL = import.meta.env.VITE_API_URL;
 
   const checkProjectorStatus = useCallback(async () => {
@@ -879,7 +875,7 @@ function App() {
       }
   }, [API_BASE_URL, isLightOn]);
 
-
+  // --- Slicing and Printing Logic (No changes here) ---
   const handleSlice = useCallback(async () => {
     if (!stlFile) {
         toast.error("Please upload an STL file first.");
@@ -1188,6 +1184,14 @@ function App() {
     }
   }, [alignmentParams]);
 
+  //---Add useEffect to handle disabling admin mode ---
+  useEffect(() => {
+    if (!isAdmin && activeTab === Tab.Hardware) {
+        setActiveTab(Tab.Projecting); // Or Tab.Slicing, as a default
+    }
+  }, [isAdmin, activeTab]);
+
+
   const sendNextHopCommand = useCallback(async () => { /* ... no changes ... */ }, []);
   useEffect(() => { /* ... no changes ... */ }, []);
 
@@ -1456,6 +1460,7 @@ const handleExportJob = useCallback(async () => {
             isProjectionWindowConnected={projectionWindowStatus === 'Connected'}
         />;
        case Tab.Hardware:
+        // This case is still needed to render the content, even if the tab is hidden
         return <HardwareTab
             projectorStatus={projectorStatus}
             ledSettings={ledSettings}
@@ -1529,7 +1534,8 @@ const handleExportJob = useCallback(async () => {
                         <nav className="flex justify-around bg-neutral-900 border-b border-neutral-800 flex-shrink-0">
                             <TabButton tab={Tab.Slicing} />
                             <TabButton tab={Tab.Projecting} />
-                            <TabButton tab={Tab.Hardware} />
+                            {/* Conditionally render the Hardware tab --- */}
+                            {isAdmin && <TabButton tab={Tab.Hardware} />}
                             <TabButton tab={Tab.Advanced} />
                         </nav>
                         <main className="flex-grow overflow-y-auto">

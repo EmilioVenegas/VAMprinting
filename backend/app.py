@@ -1,3 +1,5 @@
+# app.py
+
 import os
 import io
 import base64
@@ -15,8 +17,8 @@ from PIL import Image
 from scipy.ndimage import rotate
 from joblib import Parallel, delayed
 
-# --- VAM Hardware Import ---
-from dlp import dlpc350
+# --- VAM Hardware Import HAS BEEN REMOVED ---
+# from dlp import dlpc350 # <-- REMOVED
 
 # --- Initialize Flask App and Logger ---
 app = Flask(__name__)
@@ -26,7 +28,7 @@ deployed_frontend_url = os.environ.get("FRONTEND_URL")
 allowed_origins = [
     "http://localhost:3000",
     "http://100.102.169.19:3000",
-        # For local development
+    "http://127.0.0.1:3000", # Added for consistency
 ]
 
 # Add the deployed URL to the list if it exists
@@ -42,27 +44,9 @@ logger = logging.getLogger(__name__)
 progress_store = {}
 progress_lock = threading.Lock()
 
-# --- Singleton for Projector Hardware ---
-projector = None
-projector_lock = threading.Lock()
-# Store current settings to re-apply when toggling light
-current_led_settings = {
-    "uv": True,
-    "green": False,
-    "blue": False,
-    "uvCurrent": 45,
-    "greenCurrent": 0,
-    "blueCurrent": 0
-}
+# --- Projector Hardware Singleton and related code HAS BEEN REMOVED ---
 
-def get_projector():
-    global projector
-    with projector_lock:
-        if projector is None:
-            projector = dlpc350()
-        return projector
-
-# --- Constants for progress stages  ---
+# --- Constants for progress stages ---
 PROGRESS_MESH_LOADING = 5
 PROGRESS_VOXELIZING = 15
 PROGRESS_PROJECTION_START = 25
@@ -74,11 +58,9 @@ PROGRESS_ENCODING_SECTION = 15 # 85% + 15% = 100%
 # --- Helper function for parallel processing ---
 def process_single_angle(angle, grid):
     """Rotates the grid and computes a 2D projection."""
-    # Using order=1 for linear interpolation, faster than order=3 (cubic)
-    # and generally sufficient for voxel data.
     rotated_grid = rotate(grid, angle, axes=(0, 1), reshape=False, order=1)
     projection_2d = np.sum(rotated_grid, axis=1) # Sum along the 'depth' axis
-    return np.flipud(projection_2d.T) # Transpose and flip for standard image orientation
+    return np.flipud(projection_2d.T)
 
 
 # --- Slicing Algorithm with Staged Progress Reporting ---
@@ -89,7 +71,6 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
     """
     try:
         # --- Loading & Centering ---
-        # Check if mesh is valid before proceeding
         if mesh.is_empty:
             raise ValueError("Provided STL file resulted in an empty mesh.")
 
@@ -110,22 +91,17 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             progress_store[job_id] = {'progress': PROGRESS_VOXELIZING, 'stage': 'VOXELIZING', 'status': 'Voxelizing mesh...'}
         logger.info(f"Job {job_id}: Voxelizing mesh with pitch {pitch}.")
 
-        # Voxelize and convert to float32 for scipy.ndimage.rotate
         voxel_grid = mesh.voxelized(pitch=pitch).fill().matrix.astype(np.float32)
         
-
         # --- Projecting ---
         with progress_lock:
             progress_store[job_id] = {'progress': PROGRESS_PROJECTION_START, 'stage': 'PROJECTING', 'status': 'Preparing for projection...'}
         logger.info(f"Job {job_id}: Preparing for projection for {num_angles} angles.")
 
-        # Pad the voxel grid to prevent cropping during rotation
         max_dim = max(voxel_grid.shape)
-        # Calculate padding needed for a 45-degree rotation without cropping
         pad_width = 1
         padded_grid = np.pad(voxel_grid, pad_width, mode='constant', constant_values=0)
         
-        # Angles for projection
         theta = np.linspace(0., 360., num_angles, endpoint=False)
         
         projection_start_time = time.time()
@@ -136,22 +112,18 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             result = process_single_angle(angle, grid_to_process)
             
             with progress_lock:
-                processed_count_list.append(1) # Increment count
+                processed_count_list.append(1)
                 current_count = len(processed_count_list)
 
-                # --- ETA Calculation Logic  ---
                 elapsed_time = time.time() - projection_start_time
-                avg_time_per_projection = 0
-                eta_seconds = 0
                 eta_str = "Calculating..."
 
-                if current_count > 1: # Start calculating after the first projection
+                if current_count > 1:
                     avg_time_per_projection = elapsed_time / current_count
                     remaining_projections = num_angles - current_count
                     eta_seconds = int(avg_time_per_projection * remaining_projections)
                     eta_str = f"ETA: {eta_seconds // 60}m {eta_seconds % 60}s" if eta_seconds > 0 else "Almost done..."
                 
-                # Progress calculation (from PROGRESS_PROJECTION_START to PROGRESS_ENCODING_START)
                 progress = PROGRESS_PROJECTION_START + int((current_count / num_angles) * PROGRESS_PROJECTION_SECTION)
                 progress_store[job_id] = {
                     'progress': progress, 
@@ -165,7 +137,6 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
                 }
             return result
 
-        # Use Parallel to process angles concurrently
         projection_stack = Parallel(n_jobs=-1, backend="threading")(
             delayed(process_and_update)(angle, padded_grid, idx) for idx, angle in enumerate(theta)
         )
@@ -183,8 +154,7 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
             logger.warning(f"Job {job_id}: No projections to encode. Skipping encoding stage.")
         
         for i, projection_2d in enumerate(projection_stack):
-            with progress_lock: # Lock for progress update in loop
-                # Progress calculation (from PROGRESS_ENCODING_START to 100%)
+            with progress_lock:
                 progress = PROGRESS_ENCODING_START + int(((i + 1) / len(projection_stack)) * PROGRESS_ENCODING_SECTION)
                 progress_store[job_id] = {
                     'progress': progress, 
@@ -196,18 +166,14 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
                     }
                 }
             
-            # Normalize projection to 0-255 range for image conversion
-            # Ensures division by zero is handled if min == max
             p_max = projection_2d.max()
             p_min = projection_2d.min()
 
             if p_max > p_min:
                 p_norm = ((projection_2d - p_min) / (p_max - p_min)) * 255
             else:
-                # If all values are the same make it a black image
                 p_norm = np.zeros_like(projection_2d, dtype=np.uint8)
             
-            # Convert to PIL Image and then to Base64
             img = Image.fromarray(p_norm.astype(np.uint8), 'L') 
             buffered = io.BytesIO()
             img.save(buffered, format="PNG")
@@ -233,106 +199,13 @@ def create_projection_stack_with_progress(job_id, mesh, pitch, num_angles, rot_x
         with progress_lock:
             progress_store[job_id] = {'progress': 100, 'stage': 'FAILED', 'status': 'failed', 'error': f"Invalid STL file format: {ffe}"}
     except Exception as e:
-        logger.error(f"An unexpected error occurred in job {job_id}: {e}", exc_info=True) # exc_info=True logs traceback
+        logger.error(f"An unexpected error occurred in job {job_id}: {e}", exc_info=True)
         with progress_lock:
             progress_store[job_id] = {'progress': 100, 'stage': 'FAILED', 'status': 'failed', 'error': str(e)}
 
 # --- API Endpoints ---
 
-# --- New Projector Hardware Endpoints ---
-@app.route('/api/projector/connect', methods=['POST'])
-def connect_projector():
-    proj = get_projector()
-    if proj.connected:
-        return jsonify({"status": "Already connected"}), 200
-    try:
-        proj.Connect()
-        if proj.connected:
-            return jsonify({"status": "Connection successful"}), 200
-        else:
-            return jsonify({"error": "Failed to connect. Is the device plugged in?"}), 500
-    except Exception as e:
-        logger.error(f"Error connecting to projector: {e}", exc_info=True)
-        # Reset the singleton if connection fails badly
-        global projector
-        projector = None
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/projector/disconnect', methods=['POST'])
-def disconnect_projector():
-    global projector
-    proj = get_projector()
-    if proj.connected:
-        try:
-            proj.disable_LEDs()
-        except Exception as e:
-            logger.error(f"Could not disable LEDs on disconnect: {e}")
-    projector = None # Destroy the instance
-    logger.info("Projector instance destroyed.")
-    return jsonify({"status": "Disconnected"}), 200
-
-
-@app.route('/api/projector/status', methods=['GET'])
-def projector_status():
-    proj = get_projector()
-    return jsonify({
-        "connected": proj.connected,
-        "settings": current_led_settings
-    }), 200
-
-@app.route('/api/projector/settings', methods=['POST'])
-def projector_settings():
-    global current_led_settings
-    proj = get_projector()
-    if not proj.connected:
-        return jsonify({"error": "Projector not connected"}), 400
-    
-    data = request.get_json()
-    current_led_settings = data # Update global settings
-    
-    try:
-        # Note: Your dlp.py uses (red, green, blue) but your printing.py implies red is UV.
-        # I am mapping based on printing.py: red=UV, green=green, blue=blue
-        proj.set_current_RGB(
-            red=data['uvCurrent'], 
-            green=data['greenCurrent'], 
-            blue=data['blueCurrent']
-        )
-        logger.info(f"Set projector currents to: UV={data['uvCurrent']}, G={data['greenCurrent']}, B={data['blueCurrent']}")
-        return jsonify({"status": "Settings updated"}), 200
-    except Exception as e:
-        logger.error(f"Error setting projector currents: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/projector/light', methods=['POST'])
-def projector_light_toggle():
-    proj = get_projector()
-    if not proj.connected:
-        return jsonify({"error": "Projector not connected"}), 400
-        
-    data = request.get_json()
-    state = data.get('state') # "on" or "off"
-
-    try:
-        if state == 'on':
-            settings = current_led_settings
-            proj.enable_LEDs(
-                red=settings['uv'], 
-                green=settings['green'], 
-                blue=settings['blue']
-            )
-            logger.info(f"Enabled LEDs with settings: UV={settings['uv']}, G={settings['green']}, B={settings['blue']}")
-        elif state == 'off':
-            proj.disable_LEDs()
-            logger.info("Disabled LEDs.")
-        else:
-            return jsonify({"error": "Invalid state"}), 400
-        
-        return jsonify({"status": f"Light turned {state}"}), 200
-    except Exception as e:
-        logger.error(f"Error toggling projector light: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
+# --- Projector Hardware Endpoints HAVE BEEN REMOVED ---
 
 @app.route('/api/remesh', methods=['POST'])
 def remesh_model():
@@ -388,7 +261,6 @@ def slice_model_start():
 
     job_id = str(uuid.uuid4())
     try:
-        # Input validation
         pitch_str = request.form.get('pitch', '1.0')
         num_angles_str = request.form.get('num_angles', '360')
         rot_x_str = request.form.get('rot_x', '0')
@@ -404,7 +276,7 @@ def slice_model_start():
 
         try:
             num_angles = int(num_angles_str)
-            if num_angles <= 0: # Ensure at least one angle for projection
+            if num_angles <= 0:
                 raise ValueError("Number of angles must be a positive integer.")
         except ValueError:
             return jsonify({"error": f"Invalid num_angles value: '{num_angles_str}'"}), 400
@@ -431,7 +303,6 @@ def slice_model_start():
 
     except Exception as e:
         logger.error(f"Error starting job {job_id}: {e}", exc_info=True)
-        # Clean up job_id from store if an error occurs during startup
         with progress_lock:
             if job_id in progress_store:
                 del progress_store[job_id]
@@ -442,21 +313,19 @@ def slice_model_progress(job_id):
     def generate():
         while True:
             data = None
-            with progress_lock: # Ensure thread-safe access to progress_store
+            with progress_lock:
                 if job_id in progress_store:
                     data = progress_store[job_id]
                 
             if data:
                 yield f"data: {json.dumps(data)}\n\n"
                 if data.get('stage') in ['COMPLETE', 'FAILED']:
-                    with progress_lock: # Lock for cleanup
+                    with progress_lock:
                         if job_id in progress_store:
                             logger.info(f"Cleaning up job {job_id} from progress store.")
                             del progress_store[job_id]
                     break
             else:
-                # If job_id not found (e.g., cleaned up or never existed),
-                # send a "not found" message and terminate.
                 logger.warning(f"Job ID {job_id} not found in progress store for SSE.")
                 yield f"data: {json.dumps({'progress': 0, 'stage': 'ERROR', 'status': 'Job not found or already completed/failed.'})}\n\n"
                 break
@@ -464,11 +333,12 @@ def slice_model_progress(job_id):
             time.sleep(0.5) # Increased sleep to reduce CPU usage for polling
 
     return Response(generate(), mimetype='text/event-stream')
+
 @app.route('/', methods=['GET'])
 def health_check():
     """Health check endpoint for the ALB."""
     logger.info("Health check endpoint was hit.")
-    return jsonify({"status": "healthy"}), 200
+    return jsonify({"status": "healthy", "service": "slicing-computation"}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
