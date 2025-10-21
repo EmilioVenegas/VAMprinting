@@ -104,7 +104,7 @@ const SlicePreview: React.FC<SlicePreviewProps> = ({ images, projectionParams, a
                     className="w-full h-full object-contain transition-all duration-100"
                     style={{
                         transform: `scale(${alignmentParams.scale / 100}) translateX(${alignmentParams.translateX}px) translateY(${alignmentParams.translateY}px)`,
-                        filter: `brightness(${alignmentParams.contrast}%)`,
+                        filter: `brightness(${alignmentParams.brightness}%)`,
                         cursor: 'grab',
                     }}
                     onMouseDown={onMouseDown}

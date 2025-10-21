@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo} from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
@@ -133,6 +133,15 @@ const HardwareTab: React.FC<{
     );
 };
 
+// Type definition for the realWorldProjectionSize prop
+type RealWorldProjectionSize = {
+    realWorldWidth: string;
+    realWorldHeight: string;
+    pixelWidth: number;
+    pixelHeight: number;
+    mmPerPixel: number;
+} | null;
+
 
 // --- SlicingTab COMPONENT ---
 const SlicingTab: React.FC<{
@@ -149,8 +158,9 @@ const SlicingTab: React.FC<{
     stlFile: File | null;
     setStlFile: (file: File | null) => void;
     handleExportJob: () => void;
+    realWorldProjectionSize: RealWorldProjectionSize;   
     handleImportJob: (event: React.ChangeEvent<HTMLInputElement>) => void;
-}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, slicingProgressDetails, fileName, stlFile, setFileName, setStlFile, handleExportJob, handleImportJob }) => {
+}> = ({ slicingParams, setSlicingParams, handleSlice, slicingStatus, slicingProgress, slicingStats, slicingStatusMessage, slicingProgressDetails, fileName, stlFile, setFileName, setStlFile, handleExportJob, handleImportJob, realWorldProjectionSize }) => {
 
     const [isDragging, setIsDragging] = useState(false);
     const [simplificationPercentage, setSimplificationPercentage] = useState(80);
@@ -346,9 +356,21 @@ const SlicingTab: React.FC<{
                     </div>
                 )}
                 {slicingStatus === 'complete' && slicingStats.time !== null && (
-                    <div className="text-center text-green-500">
-                        <p className="font-semibold">Slicing complete!</p>
-                        <p className="text-sm text-neutral-400">{slicingStats.count} projections generated in {slicingStats.time.toFixed(1)}s.</p>
+                    <div className="text-center text-green-500 space-y-2">
+                        <div>
+                            <p className="font-semibold">Slicing complete!</p>
+                            <p className="text-sm text-neutral-400">{slicingStats.count} projections generated in {slicingStats.time.toFixed(1)}s.</p>
+                        </div>
+                        {realWorldProjectionSize && (
+                            <div className="text-xs text-neutral-500 text-left bg-neutral-800/50 p-2 rounded-md">
+                                <p className="font-bold text-neutral-400">Calculated Projection Size:</p>
+                                <p>{realWorldProjectionSize.realWorldWidth} mm (W) x {realWorldProjectionSize.realWorldHeight} mm (H)</p>
+                                <p className="mt-1 text-neutral-600">
+                                    Based on native image size of {realWorldProjectionSize.pixelWidth}x{realWorldProjectionSize.pixelHeight}px.
+                                    This calculation accounts for the 'Image Scale' setting in the Advanced tab.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
                 {slicingStatus === 'failed' && (
@@ -470,6 +492,18 @@ const ProjectingTab: React.FC<{
 };
 
 // --- AdvancedTab COMPONENT ---
+const getImageDimensions = (dataUri: string): Promise<{ width: number, height: number }> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        };
+        img.onerror = (err) => {
+            reject('Could not load image to get dimensions.');
+        };
+        img.src = dataUri;
+    });
+};
 const AdvancedTab: React.FC<{
     alignmentParams: AlignmentParams;
     setAlignmentParams: React.Dispatch<React.SetStateAction<AlignmentParams>>;
@@ -532,7 +566,7 @@ const AdvancedTab: React.FC<{
                 <SliderInput label="Image Scale" min={50} max={200} value={alignmentParams.scale} onChange={val => setAlignmentParams(p => ({ ...p, scale: val }))} unit="%" />
                 <SliderInput label="Translate X" min={-100} max={100} value={alignmentParams.translateX} onChange={val => setAlignmentParams(p => ({ ...p, translateX: val }))} unit="px" />
                 <SliderInput label="Translate Y" min={-100} max={100} value={alignmentParams.translateY} onChange={val => setAlignmentParams(p => ({ ...p, translateY: val }))} unit="px" />
-                <SliderInput label="Contrast" min={10} max={250} value={alignmentParams.contrast} onChange={val => setAlignmentParams(p => ({ ...p, contrast: val }))} unit="%" />
+                <SliderInput label="Brightness" min={0} max={150} value={alignmentParams.brightness} onChange={val => setAlignmentParams(p => ({ ...p, brightness: val }))} unit="%" />
             </div>
         </div>
     );
@@ -543,7 +577,7 @@ const AdvancedTab: React.FC<{
 const ProjectionView: React.FC = () => {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [transform, setTransform] = useState('scale(1) translateX(0px) translateY(0px)');
-    const [filter, setFilter] = useState('contrast(100%)');
+    const [filter, setFilter] = useState('brightness(100%)');
     const [showCalibration, setShowCalibration] = useState(false);
 
     useEffect(() => {
@@ -560,9 +594,9 @@ const ProjectionView: React.FC = () => {
                     } else if (data.type === 'TOGGLE_CALIBRATION') {
                         setShowCalibration(data.show);
                     } else if (data.type === 'UPDATE_ALIGNMENT') {
-                        const { scale, translateX, translateY, contrast } = data.params;
+                        const { scale, translateX, translateY, brightness } = data.params;
                         setTransform(`scale(${scale / 100}) translateX(${translateX}px) translateY(${translateY}px)`);
-                        setFilter(`contrast(${contrast}%)`);
+                        setFilter(`brightness(${brightness}%)`);
                     }
                 } catch (e) {
                     console.error("Failed to parse message in projection window:", e);
@@ -590,10 +624,10 @@ const ProjectionView: React.FC = () => {
         <div className="bg-black w-screen h-screen flex items-center justify-center overflow-hidden relative">
             {showCalibration && (
                 <div className="absolute inset-0 flex items-center justify-center" style={{ transform }}>
-                    <div className="relative" style={{ width: '80vmin', height: '80vmin' }}>
+                    <div className="relative" style={{ width: '100vmin', height: '100vmin' }}>
                         <div className="absolute top-0 left-1/2 bg-white w-1 h-full -translate-x-1/2"></div>
-                        <div className="absolute bottom-0 left-0 bg-white h-1 w-full"></div>
-                        <div className="absolute bottom-0 left-0 bg-white h-1 w-full"></div>
+                        <div className="absolute bottom-1 left-0 bg-white h-1 w-full"></div>
+                        <div className="absolute top-1 left-0 bg-white h-1 w-full"></div>
                     </div>
                 </div>
             )}
@@ -620,12 +654,13 @@ function App() {
   // State
   const [slicingParams, setSlicingParams] = useState<SlicingParams>({ voxelSize: 1, numProjections: 120, rotX: 0, rotY: 0, rotZ: 0 });
   const [projectionParams, setProjectionParams] = useState<ProjectionParams>({ totalRotation: 360, rotationSpeed: 30, pauseAfterRotation: 0, verticalSteps: 0, verticalDelay: 1000, verticalDirection: 1 });
-  const [alignmentParams, setAlignmentParams] = useState<AlignmentParams>({ scale: 100, translateX: 0, translateY: 0, contrast: 100 });
+  const [alignmentParams, setAlignmentParams] = useState<AlignmentParams>({ scale: 100, translateX: 0, translateY: 0, brightness: 100 });
 
   // File state
   const [fileName, setFileName] = useState<string | null>(null);
   const [stlFile, setStlFile] = useState<File | null>(null);
   const [projectionImages, setProjectionImages] = useState<string[]>([]);
+  const [projectionImageSize, setProjectionImageSize] = useState<{ width: number, height: number } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Slicing State
@@ -636,6 +671,7 @@ function App() {
   const [slicingProgressDetails, setSlicingProgressDetails] = useState<SlicingProgressDetails | null>(null);
   const sliceStartTimeRef = useRef<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  
 
   // Printing State
   const [isPrinting, setIsPrinting] = useState(false);
@@ -669,6 +705,27 @@ function App() {
 
   const CALIBRATION_OFFSET_KEY = 'vam-calibration-offset';
 
+  const PROJECTION_HEIGHT_MM = 15.7;
+
+  const realWorldProjectionSize = useMemo(() => {
+    if (!projectionImageSize) {
+        return null;
+    }
+
+    const nativeMmPerPixel = PROJECTION_HEIGHT_MM / projectionImageSize.height;
+    const scaleFactor = alignmentParams.scale / 100;
+
+    const realWorldHeight = PROJECTION_HEIGHT_MM * scaleFactor;
+    const realWorldWidth = projectionImageSize.width * nativeMmPerPixel * scaleFactor;
+
+    return {
+        realWorldWidth: realWorldWidth.toFixed(2),
+        realWorldHeight: realWorldHeight.toFixed(2),
+        pixelWidth: projectionImageSize.width,
+        pixelHeight: projectionImageSize.height,
+        mmPerPixel: nativeMmPerPixel * scaleFactor,
+    };
+  }, [projectionImageSize, alignmentParams.scale]);
 
   useEffect(() => {
     try {
@@ -835,6 +892,7 @@ function App() {
     setSlicingProgressDetails({ stage: 'IDLE', status: 'Initializing...' });
     setSlicingStats({ time: null, count: null });
     setProjectionImages([]);
+    setProjectionImageSize(null);
     sliceStartTimeRef.current = performance.now();
 
     if (eventSourceRef.current) {
@@ -880,6 +938,15 @@ function App() {
 
                 const imagesWithPrefix = data.images.map((base64: string) => `data:image/png;base64,${base64}`);
                 setProjectionImages(imagesWithPrefix);
+                
+                if (imagesWithPrefix.length > 0) {
+                    getImageDimensions(imagesWithPrefix[0])
+                        .then(setProjectionImageSize)
+                        .catch(err => {
+                            console.error("Error getting image dimensions:", err);
+                            toast.error("Could not determine projection image size.");
+                        });
+                }
 
                 setSlicingStatus('complete');
                 setSlicingStats({ time: duration, count: imagesWithPrefix.length });
@@ -1319,6 +1386,18 @@ const handleExportJob = useCallback(async () => {
             loadedImages.sort((a, b) => a.name.localeCompare(b.name));
             setProjectionImages(loadedImages.map(img => img.data));
 
+            const imageUris = loadedImages.map(img => img.data);
+            setProjectionImages(imageUris);
+            
+            if (imageUris.length > 0) {
+                getImageDimensions(imageUris[0])
+                    .then(setProjectionImageSize)
+                    .catch(err => {
+                        console.error("Error getting image dimensions from imported job:", err);
+                        toast.error("Could not determine projection image size from job file.");
+                    });
+            }
+
 
             // 3. Update UI
             setFileName(file.name.replace(/\.zip$/i, '.stl'));
@@ -1363,6 +1442,7 @@ const handleExportJob = useCallback(async () => {
             fileName={fileName} setFileName={setFileName} stlFile={stlFile} setStlFile={setStlFile}
             handleExportJob={handleExportJob}
             handleImportJob={handleImportJob}
+            realWorldProjectionSize={realWorldProjectionSize}
         />;
       case Tab.Projecting:
         return <ProjectingTab

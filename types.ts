@@ -37,7 +37,7 @@ export interface AlignmentParams {
   scale: number;
   translateX: number;
   translateY: number;
-  contrast: number;
+  brightness: number;
 }
 export interface LedSettings {
   uv: boolean;
