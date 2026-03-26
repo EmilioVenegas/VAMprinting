@@ -178,17 +178,6 @@ This entire stack of Base64 images is then ready to be projected for printing.
     ```
     The frontend will be accessible at `http://localhost:3000`.
 
-### 🐳 Docker (Backend)
-
-The backend can also be built and run using Docker.
-
-1.  From the project root directory, build the image:
-    ```bash
-    docker build -t vam-backend -f backend/Dockerfile .
-    ```
-2.  Run the container:
-    ```bash
-    docker run -p 5000:5000 vam-backend
     ```
 ---
 
