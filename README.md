@@ -51,7 +51,7 @@ A web-based controller for a volumetric 3D printer. It handles model slicing, im
     * 📂 **Import** a `.zip` job file to instantly load all settings and images, skipping the slicing step.
 
 ---
-## 🧠 Slicing Algorithm Deep Dive
+## 🧠 Slicing Algorithm
 
 The core of the VAM controller is its backend slicing engine, which converts a 3D mesh file (`.stl`) into a series of 2D projection images. This process is analogous to generating a set of X-rays or CT scans of the object from every angle.
 
@@ -68,7 +68,7 @@ The continuous surface mesh is converted into a discrete 3D bitmap, or a **voxel
 * **Parameter**: The `pitch` (Voxel Size) from the UI determines the size of each cube in the grid. A smaller pitch results in higher resolution but significantly increases computation time.
 * **Output**: A 3D NumPy array `V(x, y, z)` where `1` represents solid material and `0` represents empty space.
 
-### 3. Rotation & Projection (The "Radon Transform")
+### 3. Rotation & Projection (Radon Transform)
 This is the most computationally intensive step. To generate `N` projections (e.g., 120), the 3D voxel grid is rotated `N` times, and a 2D projection is calculated for each rotation.
 
 * **Rotation Angles**: A set of angles `θ` is generated:
